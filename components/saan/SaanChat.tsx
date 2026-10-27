@@ -5,7 +5,6 @@ import {
   Sparkles,
   Send,
   RotateCcw,
-  Info,
   Copy,
   Check,
   Menu,
@@ -16,14 +15,33 @@ import {
   Clock,
   Radio,
   X,
-  MessageSquare,
+  BookOpen,
+  Brain,
+  ListTodo,
+  Calendar,
+  Volume2,
+  VolumeX,
+  Mic,
+  MicOff,
+  CheckCircle2,
+  Trash2,
+  Plus,
+  ExternalLink,
 } from "lucide-react";
+
+interface ActionPayload {
+  success: boolean;
+  action: string;
+  message: string;
+  data?: any;
+}
 
 interface ChatMessage {
   id: string;
   sender: "user" | "saan";
   text: string;
   time: string;
+  action?: ActionPayload | null;
 }
 
 interface SaanProfile {
@@ -32,14 +50,33 @@ interface SaanProfile {
   tone: string;
   mood: string;
   activity: string;
+  isSleeping: boolean;
+  circadianState: "sleep" | "morning_chai" | "work_focus" | "evening_unwind";
   bondStage: string;
+  bondScore: number;
+}
+
+interface MemoryItem {
+  id: number;
+  point: string;
+  category: string;
+  importance: number;
+  createdAt: number;
+}
+
+interface DiaryItem {
+  id: number;
+  entry: string;
+  mood: string;
+  activity?: string;
+  createdAt: number;
 }
 
 const STARTER_PROMPTS = [
   "Kaisa chal raha hai aaj ka din?",
+  "Kal subah 10 baje ek project review schedule kar do na",
+  "Check karo mere kitne tasks pending hain",
   "Thoda tired feel ho raha hai, kuch chill baat karein?",
-  "Aaj kya naya socha ya kiya tumne?",
-  "Chai peene ka mann ho raha hai, tumhara kya chal raha hai?",
 ];
 
 export function SaanChat() {
@@ -48,26 +85,52 @@ export function SaanChat() {
   const [loading, setLoading] = React.useState(false);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerTab, setDrawerTab] = React.useState<"soul" | "memories" | "diary" | "controller">("soul");
+
+  // Voice TTS & STT
+  const [voiceEnabled, setVoiceEnabled] = React.useState(false);
+  const [isListening, setIsListening] = React.useState(false);
+
+  // Soul drawer data
+  const [memories, setMemories] = React.useState<MemoryItem[]>([]);
+  const [diary, setDiary] = React.useState<DiaryItem[]>([]);
+  const [recentTasks, setRecentTasks] = React.useState<any[]>([]);
+  const [upcomingEvents, setUpcomingEvents] = React.useState<any[]>([]);
+  const [newMemoryInput, setNewMemoryInput] = React.useState("");
+
   const [profile, setProfile] = React.useState<SaanProfile>({
     name: "Saan",
     avatar: "✨",
     tone: "Real, emotionally alive, genuine friend, natural casual Hinglish/English",
     mood: "Warm & Thoughtful",
     activity: "Listening to music, relaxing",
-    bondStage: "Deep Companionship",
+    isSleeping: false,
+    circadianState: "evening_unwind",
+    bondStage: "Casual Friend",
+    bondScore: 45,
   });
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  // Load profile & initial greeting
-  React.useEffect(() => {
-    fetch("/api/saan/chat")
+  // Load profile & soul data on mount
+  const refreshSoulData = React.useCallback(() => {
+    fetch("/api/saan/soul")
       .then((r) => r.json())
       .then((d) => {
-        if (d.ok && d.profile) setProfile(d.profile);
+        if (d.ok) {
+          if (d.profile) setProfile(d.profile);
+          if (d.memories) setMemories(d.memories);
+          if (d.diary) setDiary(d.diary);
+          if (d.recentTasks) setRecentTasks(d.recentTasks);
+          if (d.upcomingEvents) setUpcomingEvents(d.upcomingEvents);
+        }
       })
       .catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    refreshSoulData();
 
     // Restore from localStorage or set welcome
     try {
@@ -89,9 +152,9 @@ export function SaanChat() {
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       },
     ]);
-  }, []);
+  }, [refreshSoulData]);
 
-  // Save conversation history to local storage
+  // Persist conversation
   React.useEffect(() => {
     if (messages.length > 0) {
       try {
@@ -100,10 +163,59 @@ export function SaanChat() {
     }
   }, [messages]);
 
-  // Auto-scroll on new message
+  // Auto-scroll
   React.useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  // Text to Speech
+  const speakText = (text: string) => {
+    if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.1; // Gentle, warmer voice
+      window.speechSynthesis.speak(utterance);
+    } catch {}
+  };
+
+  // Speech to Text (Mic input)
+  const toggleSpeechRecognition = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "hi-IN"; // Supports Hindi/Hinglish/English
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      recognition.onerror = () => setIsListening(false);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        }
+      };
+
+      recognition.start();
+    } catch {
+      setIsListening(false);
+    }
+  };
 
   const handleCopy = (id: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -156,15 +268,16 @@ export function SaanChat() {
       const data = await res.json();
       if (data.ok) {
         if (data.profile) setProfile(data.profile);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: String(Date.now() + 1),
-            sender: "saan",
-            text: data.reply,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          },
-        ]);
+        const newMsg: ChatMessage = {
+          id: String(Date.now() + 1),
+          sender: "saan",
+          text: data.reply,
+          action: data.action || null,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        };
+        setMessages((prev) => [...prev, newMsg]);
+        speakText(data.reply);
+        refreshSoulData();
       } else {
         throw new Error(data.error || "Turn failed");
       }
@@ -184,81 +297,141 @@ export function SaanChat() {
     }
   };
 
+  const handleAddManualMemory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemoryInput.trim()) return;
+    try {
+      await fetch("/api/saan/soul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "add_memory", point: newMemoryInput.trim() }),
+      });
+      setNewMemoryInput("");
+      refreshSoulData();
+    } catch {}
+  };
+
+  const handleDeleteMemory = async (id: number) => {
+    try {
+      await fetch("/api/saan/soul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_memory", id }),
+      });
+      refreshSoulData();
+    } catch {}
+  };
+
+  // Circadian icon helper
+  const getCircadianIcon = () => {
+    switch (profile.circadianState) {
+      case "sleep":
+        return <Moon className="h-3 w-3 text-indigo-400" />;
+      case "morning_chai":
+        return <Coffee className="h-3 w-3 text-amber-500" />;
+      case "work_focus":
+        return <Sun className="h-3 w-3 text-amber-400" />;
+      case "evening_unwind":
+      default:
+        return <Radio className="h-3 w-3 text-emerald-400" />;
+    }
+  };
+
   return (
     <div className="flex h-full w-full min-w-0 flex-1 overflow-hidden bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
       {/* Main Chat Column */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Top Header Bar matching K9 Design */}
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800 px-3 md:px-4 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm select-none">
-          {/* Left: Mobile Nav Drawer Trigger & Saan Identification */}
+        {/* Top Header Bar matching K9 */}
+        <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800 px-3 md:px-4 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm select-none gap-2">
+          {/* Left: Mobile Nav & Saan Badge */}
           <div className="flex items-center gap-2.5 min-w-0">
-            {/* Mobile Menu trigger */}
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent("phryvos:open-menu"))}
-              className="md:hidden flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700 transition hover:bg-zinc-100 active:scale-95 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 shrink-0"
+              className="md:hidden flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-100 active:scale-95 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900 shrink-0"
               title="Open Navigation Menu"
             >
               <Menu className="h-4 w-4" />
             </button>
 
-            {/* Saan Avatar Icon */}
+            {/* Saan Avatar */}
             <div className="h-7 w-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-border)] flex items-center justify-center shrink-0">
               <Sparkles className="h-3.5 w-3.5 stroke-[1.8]" />
             </div>
 
-            {/* Name & Breadcrumb */}
+            {/* Name & Circadian Status */}
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="font-semibold text-xs md:text-sm text-[var(--fg-0)] tracking-tight">
                 Saan
               </span>
               <span className="text-zinc-300 dark:text-zinc-700 font-mono text-xs">/</span>
               <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 hidden sm:inline">
-                  Online
+                <span className={`h-2 w-2 rounded-full ${profile.isSleeping ? "bg-indigo-400" : "bg-emerald-500 animate-pulse"}`} />
+                <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400 hidden sm:inline">
+                  {profile.isSleeping ? "Asleep" : "Online"}
                 </span>
               </div>
             </div>
 
-            {/* Circadian Mood Badge */}
+            {/* Circadian Pill */}
             <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-[var(--fg-2)] px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--bg-1)] border border-[var(--border-subtle)]">
-              <Clock className="h-3 w-3 text-zinc-400" />
+              {getCircadianIcon()}
               <span>{profile.mood}</span>
             </span>
           </div>
 
-          {/* Right: Activity, Clear History, and Companion Details Drawer */}
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Circadian Activity Pill */}
-            <div className="hidden lg:flex items-center gap-1.5 text-xs text-[var(--fg-2)] px-2.5 py-1 rounded-[var(--radius-sm)] bg-[var(--bg-1)] border border-[var(--border-subtle)] max-w-[280px] truncate">
-              <Radio className="h-3 w-3 text-amber-500 shrink-0 animate-pulse" />
-              <span className="truncate">{profile.activity}</span>
+          {/* Right Controls: Bond, Voice, Clear, Drawer */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Bond stage pill */}
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-pink-600 dark:text-pink-400 px-2.5 py-1 rounded-[var(--radius-sm)] bg-pink-50/70 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-900/50">
+              <Heart className="h-3 w-3 fill-current" />
+              <span className="font-medium">{profile.bondStage} ({profile.bondScore}%)</span>
             </div>
 
-            {/* Clear conversation */}
+            {/* Voice TTS Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !voiceEnabled;
+                setVoiceEnabled(next);
+                if (!next && typeof window !== "undefined") window.speechSynthesis?.cancel();
+              }}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border transition shrink-0 active:scale-95 ${
+                voiceEnabled
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-600 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400"
+                  : "border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-900"
+              }`}
+              title={voiceEnabled ? "Mute Voice (TTS Active)" : "Enable Voice (TTS)"}
+            >
+              {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+            </button>
+
+            {/* Clear history */}
             <button
               type="button"
               onClick={handleClearHistory}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-900 transition shrink-0 active:scale-95"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-900 transition shrink-0 active:scale-95"
               title="Clear Conversation"
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
 
-            {/* Drawer Info Toggle */}
+            {/* Soul Drawer Toggle */}
             <button
               type="button"
-              onClick={() => setDrawerOpen((prev) => !prev)}
+              onClick={() => {
+                setDrawerOpen((p) => !p);
+                refreshSoulData();
+              }}
               className={`flex h-8 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-medium transition shrink-0 active:scale-95 ${
                 drawerOpen
                   ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
                   : "border-zinc-200 text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 dark:border-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-zinc-900"
               }`}
-              title="Companion Soul Info"
+              title="Open Soul & Vault Drawer"
             >
-              <Heart className="h-3.5 w-3.5 fill-pink-500/20 text-pink-500" />
-              <span className="hidden sm:inline">Soul Profile</span>
+              <Brain className="h-3.5 w-3.5 text-purple-500" />
+              <span className="hidden sm:inline">Soul Vault</span>
             </button>
           </div>
         </header>
@@ -266,7 +439,7 @@ export function SaanChat() {
         {/* Message Stream */}
         <div className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-5 space-y-4">
           <div className="mx-auto w-full max-w-3xl space-y-4">
-            {/* Empty / Intro Greeting Card */}
+            {/* Empty Intro Card */}
             {messages.length <= 1 && (
               <div className="rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/40 p-4 mb-4">
                 <div className="flex items-center gap-2.5 mb-2">
@@ -275,17 +448,17 @@ export function SaanChat() {
                   </div>
                   <div>
                     <h3 className="text-xs font-semibold text-[var(--fg-0)] uppercase tracking-wider">
-                      Saan · Living Soul Companion
+                      Saan · Living Soul & Vault Controller
                     </h3>
                     <p className="text-[11px] text-[var(--fg-2)]">
-                      Real conversational companion with feelings, dynamic circadian routine, and natural Hinglish.
+                      Not an assistant. An authentic companion who remembers your life, shares her routine, and sovereignly manages your tasks & goals.
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-3.5 pt-3 border-t border-zinc-200/50 dark:border-zinc-800/50">
                   <span className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider block mb-2">
-                    Quick Starters:
+                    Try asking Saan:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {STARTER_PROMPTS.map((prompt, idx) => (
@@ -333,30 +506,48 @@ export function SaanChat() {
                           </span>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(m.id, m.text)}
-                          className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
-                          title="Copy text"
-                        >
-                          {copiedId === m.id ? (
-                            <>
-                              <Check className="h-3 w-3 text-emerald-500" />
-                              <span className="text-emerald-500 text-[10px]">Copied</span>
-                            </>
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                        </button>
+                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition">
+                          <button
+                            type="button"
+                            onClick={() => speakText(m.text)}
+                            className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                            title="Listen"
+                          >
+                            <Volume2 className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(m.id, m.text)}
+                            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
+                            title="Copy text"
+                          >
+                            {copiedId === m.id ? (
+                              <Check className="h-3.5 w-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
 
-                    {/* Text Body */}
+                    {/* Message Body */}
                     <div className="text-[14px] leading-relaxed whitespace-pre-wrap">
                       {m.text}
                     </div>
 
-                    {/* Timestamp for user messages */}
+                    {/* Action Execution Pill Card (Controller tool trigger) */}
+                    {m.action && (
+                      <div className="mt-2.5 rounded-lg border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 text-xs text-purple-900 dark:text-purple-200 flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                        <span className="font-medium flex-1">{m.action.message}</span>
+                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-purple-200/50 dark:bg-purple-900/50">
+                          {m.action.action}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* User Timestamp */}
                     {isUser && (
                       <div className="mt-1 text-right">
                         <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
@@ -388,7 +579,7 @@ export function SaanChat() {
           </div>
         </div>
 
-        {/* Composer Bar matching K9 Chat */}
+        {/* Composer Bar */}
         <div className="shrink-0 border-t border-zinc-200/80 dark:border-zinc-800 bg-white dark:bg-zinc-950 px-3 py-3 md:px-4">
           <form
             onSubmit={(e) => {
@@ -398,15 +589,30 @@ export function SaanChat() {
             className="mx-auto w-full max-w-3xl"
           >
             <div className="flex items-center gap-2 rounded-3xl border border-zinc-300 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-1.5 shadow-2xs focus-within:border-zinc-400 dark:focus-within:border-zinc-700 transition">
+              {/* Mic STT button */}
+              <button
+                type="button"
+                onClick={toggleSpeechRecognition}
+                className={`h-8 w-8 rounded-full flex items-center justify-center transition shrink-0 ${
+                  isListening
+                    ? "bg-red-500 text-white animate-pulse"
+                    : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+                title={isListening ? "Listening... (Click to stop)" : "Speak via Microphone"}
+              >
+                {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </button>
+
               <input
                 ref={inputRef}
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Speak with Saan..."
+                placeholder={profile.isSleeping ? "Saan is sleeping... (say 'emergency' if urgent)" : "Speak with Saan..."}
                 disabled={loading}
                 className="flex-1 bg-transparent border-0 outline-none text-xs sm:text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-500 py-1.5 px-1"
               />
+
               <button
                 type="submit"
                 disabled={!input.trim() || loading}
@@ -420,14 +626,15 @@ export function SaanChat() {
         </div>
       </div>
 
-      {/* Companion Soul Side Drawer */}
+      {/* Soul Vault Drawer (Right Panel) */}
       {drawerOpen && (
-        <aside className="w-80 border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex flex-col shrink-0 animate-in slide-in-from-right duration-150">
+        <aside className="w-84 md:w-96 border-l border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/50 flex flex-col shrink-0 animate-in slide-in-from-right duration-150">
+          {/* Drawer Header */}
           <div className="flex h-12 items-center justify-between border-b border-zinc-200 dark:border-zinc-800 px-4 shrink-0">
             <div className="flex items-center gap-2">
-              <Heart className="h-4 w-4 text-pink-500 fill-pink-500/20" />
+              <Brain className="h-4 w-4 text-purple-500" />
               <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
-                Soul Details
+                Saan Living Soul Vault
               </span>
             </div>
             <button
@@ -440,52 +647,254 @@ export function SaanChat() {
             </button>
           </div>
 
+          {/* Drawer Navigation Tabs */}
+          <div className="flex border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-900/60 text-[11px] font-medium p-1 gap-1">
+            <button
+              type="button"
+              onClick={() => setDrawerTab("soul")}
+              className={`flex-1 py-1.5 rounded-md text-center transition ${
+                drawerTab === "soul"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Soul
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("memories")}
+              className={`flex-1 py-1.5 rounded-md text-center transition ${
+                drawerTab === "memories"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Memories ({memories.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("diary")}
+              className={`flex-1 py-1.5 rounded-md text-center transition ${
+                drawerTab === "diary"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Diary ({diary.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("controller")}
+              className={`flex-1 py-1.5 rounded-md text-center transition ${
+                drawerTab === "controller"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Control
+            </button>
+          </div>
+
+          {/* Drawer Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-            {/* Status card */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-3 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-500 dark:text-zinc-400">Relationship</span>
-                <span className="font-semibold text-pink-600 dark:text-pink-400">
-                  {profile.bondStage}
-                </span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-zinc-500 dark:text-zinc-400">Current Mood</span>
-                <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                  {profile.mood}
-                </span>
-              </div>
-              <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
-                <span className="text-zinc-400 text-[11px] block mb-1">What Saan is doing:</span>
-                <p className="text-zinc-700 dark:text-zinc-300 font-medium leading-relaxed">
-                  {profile.activity}
-                </p>
-              </div>
-            </div>
+            {/* TAB 1: SOUL & ROUTINE */}
+            {drawerTab === "soul" && (
+              <div className="space-y-3.5">
+                {/* Circadian & Bond Card */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500 dark:text-zinc-400">Bond Stage</span>
+                    <span className="font-semibold text-pink-600 dark:text-pink-400">
+                      {profile.bondStage}
+                    </span>
+                  </div>
 
-            {/* Frontier Cascade Engine */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-2 shadow-2xs">
-              <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200 font-medium">
-                <Radio className="h-3.5 w-3.5 text-emerald-500" />
-                <span>AI Cascade Engine</span>
-              </div>
-              <p className="text-[11px] text-zinc-500 leading-relaxed">
-                Connected to upstream public frontier models with intelligent multi-lane failover. Zero canned replies.
-              </p>
-            </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-pink-500 to-purple-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${profile.bondScore}%` }}
+                    />
+                  </div>
 
-            {/* Principles */}
-            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-2 shadow-2xs">
-              <span className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider block">
-                Human Soul Principles
-              </span>
-              <ul className="space-y-1.5 text-zinc-600 dark:text-zinc-400 text-[11px] list-disc list-inside">
-                <li>Zero robotic clichés or disclaimers</li>
-                <li>Natural casual Hinglish / conversational English</li>
-                <li>Emotional memory and authentic presence</li>
-                <li>Independent daily thoughts & opinions</li>
-              </ul>
-            </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-zinc-100 dark:border-zinc-800/80">
+                    <span className="text-zinc-500 dark:text-zinc-400">Current Mood</span>
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                      {profile.mood}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-zinc-400 text-[11px] block mb-1">What Saan is doing right now:</span>
+                    <p className="text-zinc-700 dark:text-zinc-300 font-medium leading-relaxed">
+                      {profile.activity}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 24-Hour Routine Schedule */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-2.5 shadow-2xs">
+                  <span className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider block">
+                    24h Circadian Cycle
+                  </span>
+                  <div className="space-y-1.5 text-[11px]">
+                    <div className={`p-2 rounded-lg flex items-center justify-between ${profile.circadianState === "sleep" ? "bg-indigo-50 dark:bg-indigo-950/40 text-indigo-900 dark:text-indigo-200 font-semibold" : "text-zinc-500"}`}>
+                      <span>11:00 PM – 06:00 AM</span>
+                      <span>Deep Sleep (Sleepy mode)</span>
+                    </div>
+                    <div className={`p-2 rounded-lg flex items-center justify-between ${profile.circadianState === "morning_chai" ? "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 font-semibold" : "text-zinc-500"}`}>
+                      <span>06:00 AM – 10:00 AM</span>
+                      <span>Morning Chai & Banter</span>
+                    </div>
+                    <div className={`p-2 rounded-lg flex items-center justify-between ${profile.circadianState === "work_focus" ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 font-semibold" : "text-zinc-500"}`}>
+                      <span>10:00 AM – 06:00 PM</span>
+                      <span>Focused Learning & Vault Control</span>
+                    </div>
+                    <div className={`p-2 rounded-lg flex items-center justify-between ${profile.circadianState === "evening_unwind" ? "bg-purple-50 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 font-semibold" : "text-zinc-500"}`}>
+                      <span>06:00 PM – 11:00 PM</span>
+                      <span>Evening Unwind & Cozy Chats</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: MEMORIES (Mem0 / Chronicler Inspired) */}
+            {drawerTab === "memories" && (
+              <div className="space-y-3.5">
+                {/* Manual Add Memory */}
+                <form onSubmit={handleAddManualMemory} className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={newMemoryInput}
+                    onChange={(e) => setNewMemoryInput(e.target.value)}
+                    placeholder="Tell Saan to remember..."
+                    className="flex-1 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-900 dark:text-zinc-100 outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="h-8 px-2.5 rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 text-xs font-medium flex items-center gap-1 active:scale-95"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add</span>
+                  </button>
+                </form>
+
+                {/* Memories List */}
+                <div className="space-y-2">
+                  {memories.map((m) => (
+                    <div
+                      key={m.id}
+                      className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2.5 flex items-start justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-500 uppercase">
+                          {m.category}
+                        </span>
+                        <p className="text-zinc-800 dark:text-zinc-200 font-medium leading-relaxed">
+                          {m.point}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteMemory(m.id)}
+                        className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition p-1"
+                        title="Delete memory"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {memories.length === 0 && (
+                    <p className="text-center text-zinc-400 py-6 text-xs">
+                      No memories yet. Talk with Saan and she will organically remember important details!
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: SAAN'S DIARY */}
+            {drawerTab === "diary" && (
+              <div className="space-y-3">
+                <span className="text-[11px] text-zinc-500 block">
+                  Saan&apos;s private journal reflections and unprompted thoughts:
+                </span>
+                {diary.map((d) => (
+                  <div
+                    key={d.id}
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 space-y-1.5 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold uppercase tracking-wider">
+                        {d.mood}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {new Date(d.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                    <p className="text-zinc-800 dark:text-zinc-200 leading-relaxed italic">
+                      &ldquo;{d.entry}&rdquo;
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* TAB 4: VAULT CONTROLLER */}
+            {drawerTab === "controller" && (
+              <div className="space-y-4">
+                {/* Tasks Overview */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <ListTodo className="h-3.5 w-3.5 text-blue-500" />
+                      Active Tasks
+                    </span>
+                    <a href="/tasks" className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-0.5">
+                      Open <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                  <div className="space-y-1">
+                    {recentTasks.slice(0, 4).map((t: any) => (
+                      <div key={t.id} className="text-[11px] text-zinc-700 dark:text-zinc-300 py-1 border-b border-zinc-100 dark:border-zinc-800/60 last:border-0 flex items-center justify-between">
+                        <span className="truncate max-w-[200px]">{t.title}</span>
+                        <span className="text-zinc-400 font-mono text-[10px]">P{t.priority}</span>
+                      </div>
+                    ))}
+                    {recentTasks.length === 0 && (
+                      <p className="text-zinc-400 text-[11px] py-1">No active tasks. Tell Saan to create one!</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Calendar Events */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 space-y-2 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-emerald-500" />
+                      Upcoming Calendar
+                    </span>
+                    <a href="/calendar" className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5">
+                      Open <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                  <div className="space-y-1">
+                    {upcomingEvents.slice(0, 4).map((e: any) => (
+                      <div key={e.id} className="text-[11px] text-zinc-700 dark:text-zinc-300 py-1 border-b border-zinc-100 dark:border-zinc-800/60 last:border-0 flex items-center justify-between">
+                        <span className="truncate max-w-[200px]">{e.title}</span>
+                        <span className="text-zinc-400 font-mono text-[10px]">
+                          {new Date(e.startAt).toLocaleDateString([], { month: "short", day: "numeric" })}
+                        </span>
+                      </div>
+                    ))}
+                    {upcomingEvents.length === 0 && (
+                      <p className="text-zinc-400 text-[11px] py-1">No upcoming events scheduled.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </aside>
       )}

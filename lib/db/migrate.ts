@@ -27,6 +27,17 @@ export function runMigrations(db: Database.Database): void {
       category TEXT DEFAULT 'fact',
       source_session_id TEXT,
       source TEXT DEFAULT 'user',
+      tier TEXT DEFAULT 'canon',
+      status TEXT DEFAULT 'active',
+      confidence REAL DEFAULT 1.0,
+      importance INTEGER DEFAULT 5,
+      source_turn_id TEXT,
+      valid_since INTEGER NOT NULL,
+      valid_until INTEGER,
+      related_ids TEXT,
+      sensitivity TEXT DEFAULT 'normal',
+      system_time INTEGER,
+      transaction_time INTEGER,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
     );

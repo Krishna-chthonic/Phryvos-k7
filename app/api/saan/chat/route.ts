@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSaanProfile, buildSaanSystemPrompt } from "@/lib/saan/soul";
-import { UPSTREAM_PUBLIC_GATEWAYS } from "@/lib/ai/free-frontier-service";
+import {
+  getSaanMemories,
+  extractMemoriesFromTurn,
+  getBondScore,
+  bumpBondScore,
+} from "@/lib/saan/memory";
+import {
+  SAAN_TOOLS_SPEC,
+  createTask,
+  listTasks,
+  completeTask,
+  createCalendarEvent,
+  listUpcomingEvents,
+  createGoal,
+  searchWeb,
+  type SaanActionResult,
+} from "@/lib/saan/controller";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -19,16 +35,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    const systemPrompt = buildSaanSystemPrompt([]);
+    // 1. Extract and store any new memories from the user's message
+    extractMemoriesFromTurn(userMessage);
+
+    // 2. Load context: bond score & memories
+    const bondScore = bumpBondScore(1);
+    const memories = getSaanMemories(12).map((m) => m.point);
+
+    // 3. Construct system prompt with tools and circadian presence
+    const systemPrompt = buildSaanSystemPrompt(memories, bondScore, SAAN_TOOLS_SPEC);
+
     const messages = [
       { role: "system" as const, content: systemPrompt },
-      ...history.slice(-10).map((h) => ({ role: h.role, content: h.content })),
+      ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
       { role: "user" as const, content: userMessage },
     ];
 
     let reply = "";
 
-    // 1. First attempt: If vault is unlocked and user configured a custom AI provider, use it!
+    // A. Custom Vault Provider attempt (if vault is unlocked)
     try {
       const vaultCtx = await requireVault();
       const def = defaultProvider(vaultCtx);
@@ -46,10 +71,10 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch {
-      // Vault locked or no custom provider — continue to free cascade
+      // Vault locked or no custom provider
     }
 
-    // 2. Second attempt: Pollinations OpenAI chat completions endpoint
+    // B. Public Frontier Gateway Cascade (Pollinations OpenAI)
     if (!reply) {
       try {
         const controller = new AbortController();
@@ -65,7 +90,7 @@ export async function POST(req: NextRequest) {
             model: "openai",
             messages,
             temperature: 0.88,
-            max_tokens: 450,
+            max_tokens: 500,
           }),
           signal: controller.signal,
         });
@@ -76,18 +101,18 @@ export async function POST(req: NextRequest) {
           reply = data.choices?.[0]?.message?.content?.trim() || "";
         }
       } catch (e) {
-        // Continue to third attempt
+        // Fallback to text endpoint
       }
     }
 
-    // 3. Third attempt: Direct Pollinations POST fallback
+    // C. Direct fast fallback
     if (!reply) {
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20_000);
 
         const promptText = `${systemPrompt}\n\nRecent conversation:\n${history
-          .slice(-6)
+          .slice(-4)
           .map((m) => `${m.role === "user" ? "Friend" : "Saan"}: ${m.content}`)
           .join("\n")}\nFriend: ${userMessage}\nSaan:`;
 
@@ -108,21 +133,56 @@ export async function POST(req: NextRequest) {
             reply = text.trim();
           }
         }
-      } catch (e) {
-        // Fallback
+      } catch (e) {}
+    }
+
+    // D. Organic sleepy / offline fallback if all network failed
+    if (!reply) {
+      const p = getSaanProfile(bondScore);
+      reply = p.isSleeping
+        ? "Hmm... neend me hoon yaar. Kal subah baat karte hain na, so ja!"
+        : `Hey... main abhi ${p.activity.toLowerCase()} kar rahi thi aur connection thoda atak gaya. Kya bol rahe the?`;
+    }
+
+    // 4. Check for Action Blocks (`saan_action`) in the reply
+    let actionExecuted: SaanActionResult | null = null;
+    const actionMatch = reply.match(/```saan_action\s*([\s\S]*?)\s*```/);
+    if (actionMatch) {
+      try {
+        const parsed = JSON.parse(actionMatch[1]);
+        const act = parsed.action;
+        const params = parsed.params || {};
+
+        if (act === "create_task") {
+          actionExecuted = createTask(params.title, params.description, params.priority, params.dueDate);
+        } else if (act === "list_tasks") {
+          actionExecuted = listTasks(params.status);
+        } else if (act === "complete_task") {
+          actionExecuted = completeTask(params.taskId);
+        } else if (act === "create_event") {
+          actionExecuted = createCalendarEvent(params.title, params.startAt, params.endAt, params.notes);
+        } else if (act === "list_events") {
+          actionExecuted = listUpcomingEvents();
+        } else if (act === "create_goal") {
+          actionExecuted = createGoal(params.title, params.targetDate, params.description);
+        } else if (act === "search_web") {
+          actionExecuted = await searchWeb(params.query);
+        }
+
+        // Clean out the raw action block from the chat reply text
+        reply = reply.replace(/```saan_action[\s\S]*?```/, "").trim();
+      } catch (err) {
+        console.warn("[SaanController] Action parse failed:", err);
       }
     }
 
-    // Natural companion reply if all network hops experienced a temporary hiccup
-    if (!reply) {
-      const profile = getSaanProfile();
-      reply = `Hey... main abhi ${profile.activity.toLowerCase()} kar rahi thi aur thoda network ruk gaya tha. Kya keh rahe the tum? Wapas batao na!`;
-    }
+    const updatedProfile = getSaanProfile(bondScore);
 
     return NextResponse.json({
       ok: true,
       reply,
-      profile: getSaanProfile(),
+      action: actionExecuted,
+      profile: updatedProfile,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });
@@ -130,8 +190,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
+  const bondScore = getBondScore();
   return NextResponse.json({
     ok: true,
-    profile: getSaanProfile(),
+    profile: getSaanProfile(bondScore),
   });
 }

@@ -23,6 +23,10 @@ import { recordUserReplied } from "@/lib/saan/proactive";
 import { pickReaction, splitBurst, calculateReplyDelay } from "@/lib/saan/humanize";
 import { getMoodOrgan } from "@/lib/saan/mood-organ";
 import { recordSpoken } from "@/lib/saan/familiarity";
+import { splitOoc, formatDirectorNotes, forNarrative } from "@/lib/saan/ooc";
+import { findOverusedPhrases, formatAntiSlopPrompt } from "@/lib/saan/anti-slop";
+import { looksConsequential, loadLedgerFromDb, addDeeds, dueDeeds, mentionsOpenDeed, markAnswered, syncLedgerToDb } from "@/lib/saan/ledger";
+import { reinforceMemory } from "@/lib/saan/auto-promote";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -41,12 +45,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: rollbackRes.success, message: rollbackRes.message });
     }
 
-    const userMessage = body.message;
+    const rawUserMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 
-    if (!userMessage || typeof userMessage !== "string") {
+    if (!rawUserMessage || typeof rawUserMessage !== "string") {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
+
+    // Split Out-of-Character (OOC) Directives from spoken dialogue (Chronicler ooc.ts pattern)
+    const { spoken, directives } = splitOoc(rawUserMessage);
+    const userMessage = spoken || rawUserMessage;
+    const spokenNarrative = forNarrative(rawUserMessage);
+    const directorNote = formatDirectorNotes(directives);
 
     // 0. Tier-0 Deterministic Crisis Safety Guardrail (HerAndHim safety.py pattern)
     const crisisCheck = checkCrisisSignals(userMessage);
@@ -68,20 +78,37 @@ export async function POST(req: NextRequest) {
     // Calculate selective pre-reply emoji reaction (HerAndHim humanize.py pattern)
     const reaction = pickReaction(userMessage);
 
+    // Anti-Slop: detect overused phrases in recent assistant replies (Chronicler anti-slop.ts pattern)
+    const assistantReplies = history.filter((h) => h.role === "assistant").map((h) => h.content);
+    const overusedPhrases = findOverusedPhrases(assistantReplies);
+    const antiSlopPrompt = formatAntiSlopPrompt(overusedPhrases);
+
     // 1. Extract and store any new memories from the user's message (Mem0 / Memobase)
     extractMemoriesFromTurn(userMessage);
 
     // 2. Load context: bond score & active bi-temporal memories (Graphiti / Datapace)
     const bondScore = bumpBondScore(1);
-    const memories = getSaanMemories(12).map((m) => m.point);
+    const rawMemories = getSaanMemories(12);
+    const memories = rawMemories.map((m) => m.point);
+
+    // Auto-promote reinforcement for used active memories (Chronicler auto-promote.ts pattern)
+    for (const m of rawMemories) {
+      reinforceMemory(m.id, "active_session");
+    }
 
     // 3. Construct system prompt with tools and circadian presence
-    const systemPrompt = buildSaanSystemPrompt(memories, bondScore, SAAN_TOOLS_SPEC);
+    let systemPrompt = buildSaanSystemPrompt(memories, bondScore, SAAN_TOOLS_SPEC);
+    if (antiSlopPrompt) {
+      systemPrompt += `\n\n${antiSlopPrompt}`;
+    }
+    if (directorNote) {
+      systemPrompt += `\n\n${directorNote}`;
+    }
 
     const messages = [
       { role: "system" as const, content: systemPrompt },
       ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
-      { role: "user" as const, content: userMessage },
+      { role: "user" as const, content: spokenNarrative },
     ];
 
     let reply = "";
@@ -217,6 +244,24 @@ export async function POST(req: NextRequest) {
 
     // Psycheros Familiarity: record spoken output to prevent future repetition
     recordSpoken(reply);
+
+    // Chronicler Consequence Ledger: Record or resolve commitments
+    if (looksConsequential(userMessage, reply)) {
+      try {
+        let ledger = loadLedgerFromDb();
+        if (mentionsOpenDeed(ledger, reply)) {
+          const due = dueDeeds(ledger, 10);
+          if (due.length > 0) {
+            ledger = markAnswered(ledger, [due[0].id], 10);
+          }
+        } else {
+          ledger = addDeeds(ledger, [{ deed: `${userMessage.slice(0, 50)}` }], 10);
+        }
+        syncLedgerToDb(ledger);
+      } catch (err) {
+        console.warn("[Chat] Consequence ledger sync error:", err);
+      }
+    }
 
     const updatedProfile = getSaanProfile(bondScore);
 

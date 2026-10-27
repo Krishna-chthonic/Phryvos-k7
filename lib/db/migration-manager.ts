@@ -255,6 +255,67 @@ export const MIGRATION_STEPS: MigrationStep[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: "0006_saan_chronicler_extraction",
+    up: (db) => {
+      // 1. Consequence Ledger (Chronicler scene/ledger.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_consequence_ledger (
+          id TEXT PRIMARY KEY,
+          text TEXT NOT NULL,
+          turn INTEGER NOT NULL,
+          affects TEXT,
+          witnesses TEXT,
+          status TEXT NOT NULL DEFAULT 'open',
+          nudged_turn INTEGER,
+          answered_turn INTEGER,
+          created_at INTEGER NOT NULL,
+          answered_at INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_ledger_status ON saan_consequence_ledger(status);
+      `);
+
+      // 2. Dyadic Relationship Drifts (Chronicler orchestrator/relationship-drift.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_relationship_drifts (
+          id TEXT PRIMARY KEY,
+          character_id TEXT NOT NULL,
+          target TEXT NOT NULL,
+          axis TEXT NOT NULL,
+          direction TEXT NOT NULL,
+          body TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          evidence_rids TEXT NOT NULL,
+          why TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_drifts_target ON saan_relationship_drifts(character_id, target);
+      `);
+
+      // 3. Autonomous 1st-Person Self-Model (Chronicler identity/self-model-generator.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_self_model (
+          id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          inputs_hash TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      `);
+
+      // 4. Memory Reinforcements for Auto-Promotion (Chronicler orchestrator/auto-promote.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_memory_reinforcements (
+          memory_id INTEGER PRIMARY KEY,
+          reinforcement_count INTEGER NOT NULL DEFAULT 1,
+          sessions TEXT NOT NULL,
+          first_reinforced_at INTEGER NOT NULL,
+          last_reinforced_at INTEGER NOT NULL,
+          is_promoted INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+    },
+  },
 ];
 
 /**

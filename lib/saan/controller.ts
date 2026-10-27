@@ -13,6 +13,8 @@ import { addPersonalDate, listPersonalDates, deletePersonalDate } from "./person
 import { addWish, listPendingWishes, markWishFulfilled, markWishDismissed } from "./wishlist";
 import { getMoodOrgan } from "./mood-organ";
 import { runWeeklyConsolidationPass } from "./consolidation";
+import { loadLedgerFromDb, markAnswered, dismiss, syncLedgerToDb, openDeeds } from "./ledger";
+import { getLatestSelfModel } from "./self-model";
 
 export interface SaanActionResult {
   success: boolean;
@@ -82,6 +84,8 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "list_dates":
     case "list_wishes":
     case "get_mindfulness":
+    case "list_deeds":
+    case "get_self_model":
       return 1; // Tier 1: Auto-permitted read
 
     case "create_task":
@@ -92,6 +96,7 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "add_wish":
     case "fulfill_wish":
     case "consolidate_memories":
+    case "resolve_deed":
       return 2; // Tier 2: Staged mutation with 1-click rollback
 
     case "delete_task":
@@ -518,6 +523,70 @@ export function consolidateMemoriesAction(): SaanActionResult {
 }
 
 /**
+ * Lists active consequence ledger deeds and commitments (Chronicler pattern)
+ */
+export function listDeedsAction(): SaanActionResult {
+  try {
+    const ledger = loadLedgerFromDb();
+    const open = openDeeds(ledger);
+    return {
+      success: true,
+      action: "list_deeds",
+      tier: 1,
+      message: `Found ${open.length} active commitments/deeds in consequence ledger`,
+      data: open,
+    };
+  } catch (err: any) {
+    return { success: false, action: "list_deeds", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Resolves or dismisses an active deed (Chronicler pattern)
+ */
+export function resolveDeedAction(
+  deedId: string,
+  resolution: "answered" | "dismissed" = "answered"
+): SaanActionResult {
+  try {
+    let ledger = loadLedgerFromDb();
+    if (resolution === "dismissed") {
+      ledger = dismiss(ledger, deedId);
+    } else {
+      ledger = markAnswered(ledger, [deedId], 999);
+    }
+    syncLedgerToDb(ledger);
+    return {
+      success: true,
+      action: "resolve_deed",
+      tier: 2,
+      message: `Deed ${deedId} marked as ${resolution}`,
+      data: { deedId, resolution },
+    };
+  } catch (err: any) {
+    return { success: false, action: "resolve_deed", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Retrieves Saan's 1st-person self-model (Chronicler pattern)
+ */
+export function getSelfModelAction(): SaanActionResult {
+  try {
+    const model = getLatestSelfModel();
+    return {
+      success: true,
+      action: "get_self_model",
+      tier: 1,
+      message: model ? "Retrieved active 1st-person self-model" : "Self-model not yet generated",
+      data: model,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_self_model", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -550,6 +619,12 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return getMindfulnessAction();
     case "consolidate_memories":
       return consolidateMemoriesAction();
+    case "list_deeds":
+      return listDeedsAction();
+    case "resolve_deed":
+      return resolveDeedAction(params.deedId, params.resolution);
+    case "get_self_model":
+      return getSelfModelAction();
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -559,7 +634,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model",
   "params": { ... }
 }
 \`\`\`
@@ -579,4 +654,7 @@ Params guide:
 - list_wishes: {}
 - get_mindfulness: {}
 - consolidate_memories: {}
+- list_deeds: {}
+- resolve_deed: { "deedId": "d1", "resolution": "answered" | "dismissed" }
+- get_self_model: {}
 `;

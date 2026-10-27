@@ -6,9 +6,5 @@ export const metadata = {
 };
 
 export default function SaanPage() {
-  return (
-    <div className="p-4 md:p-6 h-full flex flex-col justify-center">
-      <SaanChat />
-    </div>
-  );
+  return <SaanChat />;
 }

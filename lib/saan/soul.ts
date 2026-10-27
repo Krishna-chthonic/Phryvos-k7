@@ -172,6 +172,14 @@ export function updateRelationshipFromSentiment(
   return updated;
 }
 
+export function getCircadianState(hour?: number): SaanSoulProfile["circadianState"] {
+  const h = typeof hour === "number" ? hour : new Date().getHours();
+  if (h >= 23 || h < 6) return "sleep";
+  if (h >= 6 && h < 10) return "morning_chai";
+  if (h >= 10 && h < 18) return "work_focus";
+  return "evening_unwind";
+}
+
 /**
  * Returns dynamic soul profile based on hour and bond score
  */

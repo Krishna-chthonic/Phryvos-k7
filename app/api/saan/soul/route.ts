@@ -13,6 +13,7 @@ import { listPendingWishes, addWish, markWishFulfilled } from "@/lib/saan/wishli
 import { getMoodOrgan } from "@/lib/saan/mood-organ";
 import { getRecentDreamFragments, saveDreamFragment } from "@/lib/saan/dreamer";
 import { getLatestConsolidation, runWeeklyConsolidationPass } from "@/lib/saan/consolidation";
+import { getDynamicStarterChips } from "@/lib/saan/airi-starter-chips";
 
 export async function GET() {
   try {
@@ -28,6 +29,7 @@ export async function GET() {
     const moodState = getMoodOrgan().getState();
     const dreamFragments = getRecentDreamFragments(5);
     const latestConsolidation = getLatestConsolidation("weekly");
+    const starterChips = getDynamicStarterChips();
 
     return NextResponse.json({
       ok: true,
@@ -40,6 +42,7 @@ export async function GET() {
       wishes,
       dreamFragments,
       latestConsolidation,
+      starterChips,
       recentTasks: tasksRes.data || [],
       upcomingEvents: eventsRes.data || [],
     });

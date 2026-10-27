@@ -177,3 +177,5 @@ export function formatDatesForPrompt(lookaheadDays = 7, fromDate = new Date()): 
 
   return `UPCOMING PERSONAL DATES & MILESTONES (HerAndHim anticipation window):\n${lines.join("\n")}`;
 }
+
+export const getUpcomingPersonalDates = getUpcomingDates;

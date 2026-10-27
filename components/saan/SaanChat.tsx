@@ -27,7 +27,10 @@ import {
   Trash2,
   Plus,
   ExternalLink,
+  ChevronDown,
 } from "lucide-react";
+import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
+import { StatusCapsule } from "./StatusCapsule";
 
 interface ActionPayload {
   success: boolean;
@@ -45,6 +48,8 @@ interface ChatMessage {
   time: string;
   action?: ActionPayload | null;
   reaction?: string | null;
+  thoughts?: string[];
+  plans?: string[];
 }
 
 interface SaanProfile {
@@ -108,6 +113,8 @@ export function SaanChat() {
   const [personalDates, setPersonalDates] = React.useState<any[]>([]);
   const [wishes, setWishes] = React.useState<any[]>([]);
   const [newMemoryInput, setNewMemoryInput] = React.useState("");
+  const [starterPrompts, setStarterPrompts] = React.useState<string[]>(STARTER_PROMPTS);
+  const [moodPad, setMoodPad] = React.useState({ valence: 0.1, arousal: 0.0, dominance: 0.2 });
 
   const [profile, setProfile] = React.useState<SaanProfile>({
     name: "Saan",
@@ -137,6 +144,18 @@ export function SaanChat() {
           if (d.upcomingEvents) setUpcomingEvents(d.upcomingEvents);
           if (d.personalDates) setPersonalDates(d.personalDates);
           if (d.wishes) setWishes(d.wishes);
+          if (d.moodState) {
+            setMoodPad({
+              valence: typeof d.moodState.valence === "number" ? d.moodState.valence : 0.1,
+              arousal: typeof d.moodState.arousal === "number" ? d.moodState.arousal : 0.0,
+              dominance: typeof d.moodState.dominance === "number" ? d.moodState.dominance : 0.2,
+            });
+          }
+          if (Array.isArray(d.starterChips) && d.starterChips.length > 0) {
+            setStarterPrompts(
+              d.starterChips.map((c: any) => (typeof c === "string" ? c : c.label || c.text || ""))
+            );
+          }
         }
       })
       .catch(() => {});
@@ -192,7 +211,8 @@ export function SaanChat() {
     if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
       stopSpeech();
-      const utterance = new SpeechSynthesisUtterance(text);
+      const naturalSpeech = toNaturalSpeechText(text);
+      const utterance = new SpeechSynthesisUtterance(naturalSpeech);
       utterance.rate = profile.isSleeping ? 0.9 : 1.0;
       utterance.pitch = 1.1; // Gentle, warmer voice
       window.speechSynthesis.speak(utterance);
@@ -329,6 +349,8 @@ export function SaanChat() {
             text: b,
             action: i === data.bubbles.length - 1 ? (data.action || null) : null,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            thoughts: i === 0 ? (data.thoughts || undefined) : undefined,
+            plans: i === 0 ? (data.plans || undefined) : undefined,
           }));
           setMessages((prev) => {
             const updated = [...prev];
@@ -344,6 +366,8 @@ export function SaanChat() {
             text: data.reply,
             action: data.action || null,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            thoughts: data.thoughts || undefined,
+            plans: data.plans || undefined,
           };
           setMessages((prev) => {
             const updated = [...prev];
@@ -473,11 +497,18 @@ export function SaanChat() {
               </div>
             </div>
 
-            {/* Circadian Pill */}
-            <span className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-[var(--fg-2)] px-2 py-0.5 rounded-[var(--radius-xs)] bg-[var(--bg-1)] border border-[var(--border-subtle)]">
-              {getCircadianIcon()}
-              <span>{profile.mood}</span>
-            </span>
+            {/* Circadian Pill / Airi Status Capsule */}
+            <div className="hidden md:inline-flex">
+              <StatusCapsule
+                moodLabel={profile.mood}
+                pad={moodPad}
+                circadianPhase={profile.circadianState}
+                bondStage={profile.bondStage}
+                bondScore={profile.bondScore}
+                activityStatus={loading ? "thinking" : "idle"}
+                onRefresh={refreshSoulData}
+              />
+            </div>
           </div>
 
           {/* Right Controls: Bond, Voice, Clear, Drawer */}
@@ -561,7 +592,7 @@ export function SaanChat() {
                     Try asking Saan:
                   </span>
                   <div className="flex flex-wrap gap-1.5">
-                    {STARTER_PROMPTS.map((prompt, idx) => (
+                    {starterPrompts.map((prompt, idx) => (
                       <button
                         key={idx}
                         type="button"
@@ -629,6 +660,23 @@ export function SaanChat() {
                           </button>
                         </div>
                       </div>
+                    )}
+
+                    {/* Collapsible Thoughts Disclosure (Airi reasoning isolation pattern) */}
+                    {m.thoughts && m.thoughts.length > 0 && (
+                      <details className="mb-2.5 rounded-lg border border-purple-200/50 dark:border-purple-900/40 bg-purple-50/40 dark:bg-purple-950/20 px-3 py-2 text-xs">
+                        <summary className="cursor-pointer font-medium select-none flex items-center gap-1.5 text-purple-700 dark:text-purple-300 hover:opacity-80 transition">
+                          <Sparkles className="h-3 w-3 text-purple-500 shrink-0" />
+                          <span>Saan's Reasoning ({m.thoughts.length} {m.thoughts.length === 1 ? "thought block" : "thought blocks"})</span>
+                        </summary>
+                        <div className="mt-2 pt-2 border-t border-purple-200/40 dark:border-purple-900/40 space-y-2 font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">
+                          {m.thoughts.map((th, i) => (
+                            <div key={i} className="bg-white/50 dark:bg-zinc-900/50 p-2 rounded border border-purple-100 dark:border-zinc-800">
+                              {th}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
                     )}
 
                     {/* Message Body */}

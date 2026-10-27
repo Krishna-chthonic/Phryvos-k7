@@ -25,6 +25,10 @@ import {
 } from "./mimir-cognitive";
 import { runHuginnScan, getHuginnInsights } from "./huginn";
 import { getYggdrasilVizSummary, buildYggdrasilGraph } from "./yggdrasil";
+import { getDynamicStarterChips } from "./airi-starter-chips";
+import { toNaturalSpeechText } from "./speech-transformer";
+import { categorizeResponse } from "./airi-reasoning";
+import { parseStreamingControlTokens } from "./airi-streaming-control";
 
 export interface SaanActionResult {
   success: boolean;
@@ -98,7 +102,11 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_self_model":
     case "get_cognitive_state":
     case "get_memory_graph":
-      return 1; // Tier 1: Auto-permitted read
+    case "get_starter_chips":
+    case "transform_speech_text":
+    case "categorize_text":
+    case "parse_streaming_controls":
+      return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
     case "complete_task":
@@ -731,6 +739,87 @@ export function getMemoryGraphAction(): SaanActionResult {
 }
 
 /**
+ * Retrieves dynamic contextual starter chips (Airi pattern)
+ */
+export function getStarterChipsAction(): SaanActionResult {
+  try {
+    const chips = getDynamicStarterChips();
+    return {
+      success: true,
+      action: "get_starter_chips",
+      tier: 1,
+      message: `Generated ${chips.length} contextual starter chips`,
+      data: chips,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_starter_chips", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Transforms raw text containing math, chemistry, and prices into natural spoken text (Airi pattern)
+ */
+export function transformSpeechTextAction(text: string): SaanActionResult {
+  try {
+    if (typeof text !== "string") {
+      return { success: false, action: "transform_speech_text", tier: 1, message: "Missing or invalid text parameter" };
+    }
+    const spoken = toNaturalSpeechText(text);
+    return {
+      success: true,
+      action: "transform_speech_text",
+      tier: 1,
+      message: "Transformed text to natural speech format",
+      data: { raw: text, spoken },
+    };
+  } catch (err: any) {
+    return { success: false, action: "transform_speech_text", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Categorizes and isolates reasoning/thought blocks from conversational speech (Airi pattern)
+ */
+export function categorizeTextAction(text: string): SaanActionResult {
+  try {
+    if (typeof text !== "string") {
+      return { success: false, action: "categorize_text", tier: 1, message: "Missing or invalid text parameter" };
+    }
+    const result = categorizeResponse(text);
+    return {
+      success: true,
+      action: "categorize_text",
+      tier: 1,
+      message: `Categorized response (${result.thoughts.length} thought blocks, ${result.plans.length} plans)`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "categorize_text", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Parses streaming cadence controls (<|DELAY|>, <|ACT|>, <|CALL|>) from output (Airi pattern)
+ */
+export function parseStreamingControlsAction(text: string): SaanActionResult {
+  try {
+    if (typeof text !== "string") {
+      return { success: false, action: "parse_streaming_controls", tier: 1, message: "Missing or invalid text parameter" };
+    }
+    const result = parseStreamingControlTokens(text);
+    return {
+      success: true,
+      action: "parse_streaming_controls",
+      tier: 1,
+      message: `Parsed ${result.controls.length} control tokens`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "parse_streaming_controls", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -781,6 +870,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return reliveMemoryAction(params.memoryId);
     case "get_memory_graph":
       return getMemoryGraphAction();
+    case "get_starter_chips":
+      return getStarterChipsAction();
+    case "transform_speech_text":
+      return transformSpeechTextAction(params.text);
+    case "categorize_text":
+      return categorizeTextAction(params.text);
+    case "parse_streaming_controls":
+      return parseStreamingControlsAction(params.text);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -790,7 +887,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls",
   "params": { ... }
 }
 \`\`\`

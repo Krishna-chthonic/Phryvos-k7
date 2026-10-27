@@ -27,6 +27,9 @@ import { splitOoc, formatDirectorNotes, forNarrative } from "@/lib/saan/ooc";
 import { findOverusedPhrases, formatAntiSlopPrompt } from "@/lib/saan/anti-slop";
 import { looksConsequential, loadLedgerFromDb, addDeeds, dueDeeds, mentionsOpenDeed, markAnswered, syncLedgerToDb } from "@/lib/saan/ledger";
 import { reinforceMemory } from "@/lib/saan/auto-promote";
+import { formatTimePrefix } from "@/lib/saan/airi-datetime";
+import { categorizeResponse } from "@/lib/saan/airi-reasoning";
+import { parseStreamingControlTokens } from "@/lib/saan/airi-streaming-control";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -105,10 +108,13 @@ export async function POST(req: NextRequest) {
       systemPrompt += `\n\n${directorNote}`;
     }
 
+    // Airi temporal anchor prefix for user turns
+    const timeStampedUserMessage = `${formatTimePrefix()}${spokenNarrative}`;
+
     const messages = [
       { role: "system" as const, content: systemPrompt },
       ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
-      { role: "user" as const, content: spokenNarrative },
+      { role: "user" as const, content: timeStampedUserMessage },
     ];
 
     let reply = "";
@@ -216,6 +222,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 4b. Airi Reasoning isolation & Streaming Control token categorization
+    const categorized = categorizeResponse(reply);
+    const thoughts = categorized.thoughts;
+    const plans = categorized.plans;
+    const streamingControls = parseStreamingControlTokens(categorized.speech);
+    reply = streamingControls.cleanText;
+
     // 5. Post-Generation Anti-AI Cliché Sanitization (SillyTavern pattern)
     reply = sanitizeSaanOutput(reply);
 
@@ -273,6 +286,9 @@ export async function POST(req: NextRequest) {
       reaction,
       action: actionExecuted,
       profile: updatedProfile,
+      thoughts,
+      plans,
+      controls: streamingControls.controls,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

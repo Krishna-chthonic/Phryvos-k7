@@ -200,6 +200,61 @@ export const MIGRATION_STEPS: MigrationStep[] = [
       `);
     },
   },
+  {
+    version: 5,
+    name: "0005_saan_psycheros_extraction",
+    up: (db: Database.Database) => {
+      // 1. Mood Organ Affective State Singleton (Psycheros mood-organ.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_mood_state (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          valence REAL NOT NULL DEFAULT 0.1,
+          arousal REAL NOT NULL DEFAULT 0.0,
+          dominance REAL NOT NULL DEFAULT 0.0,
+          baseline_valence REAL NOT NULL DEFAULT 0.1,
+          baseline_arousal REAL NOT NULL DEFAULT 0.0,
+          baseline_dominance REAL NOT NULL DEFAULT 0.0,
+          last_update INTEGER NOT NULL,
+          last_lately_tick INTEGER NOT NULL
+        );
+        INSERT OR IGNORE INTO saan_mood_state (
+          id, valence, arousal, dominance, 
+          baseline_valence, baseline_arousal, baseline_dominance, 
+          last_update, last_lately_tick
+        )
+        VALUES (
+          1, 0.1, 0.0, 0.0, 
+          0.1, 0.0, 0.0, 
+          (strftime('%s', 'now') * 1000), (strftime('%s', 'now') * 1000)
+        );
+      `);
+
+      // 2. Dream Fragments Ledger (Psycheros dreamer.ts pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_dream_fragments (
+          id TEXT PRIMARY KEY,
+          fragment TEXT NOT NULL,
+          cycle_number INTEGER NOT NULL DEFAULT 1,
+          felt_sense TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_dream_fragments_ts ON saan_dream_fragments(created_at);
+      `);
+
+      // 3. Hierarchical Memory Consolidations (Psycheros consolidation runner pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_consolidations (
+          id TEXT PRIMARY KEY,
+          period_type TEXT NOT NULL,
+          period_key TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          source_memory_count INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_saan_consolidations_key ON saan_consolidations(period_type, period_key);
+      `);
+    },
+  },
 ];
 
 /**

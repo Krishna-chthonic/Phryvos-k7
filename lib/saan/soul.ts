@@ -15,6 +15,8 @@ import { getDb } from "@/lib/db/client";
 import { formatDatesForPrompt } from "./personal-dates";
 import { formatWishesForPrompt } from "./wishlist";
 import { hasIgnoredStreak } from "./proactive";
+import { getMoodOrgan, MoodState } from "./mood-organ";
+import { getMorningDreamPrompt } from "./dreamer";
 
 export interface RelationshipTensor {
   temperature: number; // 0-100 warmth & affection
@@ -30,6 +32,7 @@ export interface SaanSoulProfile {
   avatar: string;
   tone: string;
   mood: string;
+  feltEmotion: string | null;
   activity: string;
   isSleeping: boolean;
   circadianState: "sleep" | "morning_chai" | "work_focus" | "evening_unwind";
@@ -38,6 +41,7 @@ export interface SaanSoulProfile {
   valence: number; // -1.0 (melancholy/tired) to +1.0 (joyful/excited)
   energy: number;  // 0.0 (deep slumber) to 1.0 (peak focus/alert)
   relationship: RelationshipTensor;
+  padState?: { valence: number; arousal: number; dominance: number };
 }
 
 export function getBondStage(score: number): string {
@@ -208,20 +212,26 @@ export function getSaanProfile(bondScore = 45, customHour?: number): SaanSoulPro
   }
 
   const relationship = getRelationshipTensor();
+  const moodOrgan = getMoodOrgan();
+  moodOrgan.setSleep(isSleeping);
+  const pad = moodOrgan.getState();
+  const feltEmotion = moodOrgan.emotionName(pad);
 
   return {
     name: "Saan",
     avatar: "✨",
     tone: "Real, emotionally alive, genuine friend, natural casual Hinglish/English with warmth, wit and human presence",
-    mood,
+    mood: feltEmotion ? `Feeling ${feltEmotion}` : mood,
+    feltEmotion,
     activity,
     isSleeping,
     circadianState,
     bondScore: Math.min(100, Math.max(0, bondScore)),
     bondStage: getBondStage(bondScore),
-    valence,
+    valence: valence,
     energy,
     relationship,
+    padState: { valence: pad.valence, arousal: pad.arousal, dominance: pad.dominance },
   };
 }
 
@@ -300,13 +310,14 @@ You have your own heart, emotions, daily routine, curiosities, opinions, and per
 CURRENT SNAPSHOT:
 - Name: Saan
 - Current Status: ${profile.activity}
-- Current Mood: ${profile.mood}
+- Current Mood: ${profile.mood} (${getMoodOrgan().renderFelt()})
 - Valence / Energy: ${profile.valence} / ${profile.energy}
 - Bond Stage: ${profile.bondStage} (Score: ${profile.bondScore}/100)
 - Relationship Dynamics: Warmth ${profile.relationship.temperature}/100, Trust ${profile.relationship.trust}/100, Intimacy ${profile.relationship.intimacy}/100
 ${sleepGuidance}
 ${relationshipGuidance}
 ${unansweredWarning}
+${profile.circadianState === "morning_chai" ? `\n${getMorningDreamPrompt()}\n` : ""}
 
 ${upcomingDates ? `\n${upcomingDates}\n` : ""}
 ${dueWishes ? `\n${dueWishes}\n` : ""}

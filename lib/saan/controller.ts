@@ -11,6 +11,8 @@
 import { getDb } from "@/lib/db/client";
 import { addPersonalDate, listPersonalDates, deletePersonalDate } from "./personal-dates";
 import { addWish, listPendingWishes, markWishFulfilled, markWishDismissed } from "./wishlist";
+import { getMoodOrgan } from "./mood-organ";
+import { runWeeklyConsolidationPass } from "./consolidation";
 
 export interface SaanActionResult {
   success: boolean;
@@ -79,6 +81,7 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "search_notes":
     case "list_dates":
     case "list_wishes":
+    case "get_mindfulness":
       return 1; // Tier 1: Auto-permitted read
 
     case "create_task":
@@ -88,6 +91,7 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "remember_date":
     case "add_wish":
     case "fulfill_wish":
+    case "consolidate_memories":
       return 2; // Tier 2: Staged mutation with 1-click rollback
 
     case "delete_task":
@@ -469,6 +473,51 @@ export function listWishesAction(): SaanActionResult {
 }
 
 /**
+ * Retrieves Saan's internal emotional mood state and nearest felt terms (Psycheros pattern)
+ */
+export function getMindfulnessAction(): SaanActionResult {
+  try {
+    const organ = getMoodOrgan();
+    const felt = organ.renderFelt();
+    const pad = organ.getState();
+    const emotion = organ.emotionName(pad) || "quiet inside";
+    return {
+      success: true,
+      action: "get_mindfulness",
+      tier: 1,
+      message: `Current emotional state: ${emotion} (v=${pad.valence.toFixed(2)}, a=${pad.arousal.toFixed(2)}, d=${pad.dominance.toFixed(2)})`,
+      data: {
+        pad,
+        felt,
+        emotion,
+      },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_mindfulness", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Runs a weekly memory consolidation pass (Psycheros multi-scale consolidation pattern)
+ */
+export function consolidateMemoriesAction(): SaanActionResult {
+  try {
+    const res = runWeeklyConsolidationPass();
+    return {
+      success: true,
+      action: "consolidate_memories",
+      tier: 2,
+      message: res
+        ? `Consolidated ${res.sourceMemoryCount} memories into weekly summary #${res.id} (${res.periodKey})`
+        : `Memory consolidation skipped: no memories to consolidate`,
+      data: res,
+    };
+  } catch (err: any) {
+    return { success: false, action: "consolidate_memories", tier: 2, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -497,6 +546,10 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return fulfillWishAction(params.wishId);
     case "list_wishes":
       return listWishesAction();
+    case "get_mindfulness":
+      return getMindfulnessAction();
+    case "consolidate_memories":
+      return consolidateMemoriesAction();
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -506,7 +559,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories",
   "params": { ... }
 }
 \`\`\`
@@ -524,4 +577,6 @@ Params guide:
 - add_wish: { "text": "Things user wants to do / buy / visit", "urgency": "low" | "medium" | "high" }
 - fulfill_wish: { "wishId": "id_string" }
 - list_wishes: {}
+- get_mindfulness: {}
+- consolidate_memories: {}
 `;

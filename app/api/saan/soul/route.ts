@@ -10,6 +10,9 @@ import { getDiaryEntries, writeDiaryEntry } from "@/lib/saan/diary";
 import { listTasks, listUpcomingEvents } from "@/lib/saan/controller";
 import { listPersonalDates, addPersonalDate, deletePersonalDate } from "@/lib/saan/personal-dates";
 import { listPendingWishes, addWish, markWishFulfilled } from "@/lib/saan/wishlist";
+import { getMoodOrgan } from "@/lib/saan/mood-organ";
+import { getRecentDreamFragments, saveDreamFragment } from "@/lib/saan/dreamer";
+import { getLatestConsolidation, runWeeklyConsolidationPass } from "@/lib/saan/consolidation";
 
 export async function GET() {
   try {
@@ -22,15 +25,21 @@ export async function GET() {
     const personalDates = listPersonalDates();
     const wishes = listPendingWishes();
     const relationship = getRelationshipTensor();
+    const moodState = getMoodOrgan().getState();
+    const dreamFragments = getRecentDreamFragments(5);
+    const latestConsolidation = getLatestConsolidation("weekly");
 
     return NextResponse.json({
       ok: true,
       profile,
       relationship,
+      moodState,
       memories,
       diary,
       personalDates,
       wishes,
+      dreamFragments,
+      latestConsolidation,
       recentTasks: tasksRes.data || [],
       upcomingEvents: eventsRes.data || [],
     });
@@ -42,7 +51,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, point, category, entry, mood, id, date, label, recurring, text, urgency, wishId } = body;
+    const { action, point, category, entry, mood, id, date, label, recurring, text, urgency, wishId, fragment, cycleNumber, feltSense } = body;
 
     if (action === "add_memory" && point) {
       saveSaanMemory(point, category || "general", 6);
@@ -77,6 +86,16 @@ export async function POST(req: NextRequest) {
     if (action === "fulfill_wish" && wishId) {
       const success = markWishFulfilled(String(wishId));
       return NextResponse.json({ ok: success, message: "Wish fulfilled" });
+    }
+
+    if (action === "record_dream" && fragment) {
+      const rec = saveDreamFragment(fragment, Number(cycleNumber || 1), feltSense);
+      return NextResponse.json({ ok: true, message: "Dream fragment recorded", rec });
+    }
+
+    if (action === "run_consolidation") {
+      const rec = runWeeklyConsolidationPass();
+      return NextResponse.json({ ok: true, message: "Weekly consolidation completed", rec });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

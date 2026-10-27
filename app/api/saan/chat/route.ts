@@ -21,6 +21,8 @@ import {
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
 import { pickReaction, splitBurst, calculateReplyDelay } from "@/lib/saan/humanize";
+import { getMoodOrgan } from "@/lib/saan/mood-organ";
+import { recordSpoken } from "@/lib/saan/familiarity";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -194,13 +196,27 @@ export async function POST(req: NextRequest) {
     const bubbles = splitBurst(reply);
     const delayMs = calculateReplyDelay(reply);
 
-    // 7. Update 4D Relationship Tensor based on Turn Sentiment (HerAndHim pattern)
+    // 7. Update 4D Relationship Tensor (HerAndHim pattern) & Psycheros Mood Organ
     const sentiment = /(\bgood\b|great|love|happy|awesome|mast|badhai|shandar|thank)/i.test(userMessage)
       ? "positive"
       : /(\bbad\b|terrible|sad|angry|gussa|dukhi|upset|hate)/i.test(userMessage)
       ? "negative"
       : "neutral";
     updateRelationshipFromSentiment(sentiment, 0.5);
+
+    // Psycheros Mood Organ: Ingest external turn modifier
+    const valenceDelta = sentiment === "positive" ? 0.25 : sentiment === "negative" ? -0.25 : 0.05;
+    const arousalDelta = sentiment !== "neutral" ? 0.2 : -0.05;
+    getMoodOrgan().ingest({
+      valence: valenceDelta,
+      arousal: arousalDelta,
+      dominance: 0.1,
+      weight: 0.5,
+      source: "user_turn",
+    });
+
+    // Psycheros Familiarity: record spoken output to prevent future repetition
+    recordSpoken(reply);
 
     const updatedProfile = getSaanProfile(bondScore);
 

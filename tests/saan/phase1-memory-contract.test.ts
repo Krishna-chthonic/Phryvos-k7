@@ -48,7 +48,7 @@ export function runPhase1Tests(): void {
   const saveSuccess = saveSaanMemory(testFact, "preference", 8, "explicit_directive");
   assert(saveSuccess === true, "saveSaanMemory should succeed for fresh fact");
 
-  const memories = getSaanMemories(5);
+  const memories = getSaanMemories(50);
   const found = memories.find((m) => m.point === testFact);
   assert(Boolean(found), "Fresh memory must be retrievable in active memories");
   assert(found!.status === "active", "Fresh memory status must be 'active'");

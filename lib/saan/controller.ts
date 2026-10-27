@@ -15,6 +15,16 @@ import { getMoodOrgan } from "./mood-organ";
 import { runWeeklyConsolidationPass } from "./consolidation";
 import { loadLedgerFromDb, markAnswered, dismiss, syncLedgerToDb, openDeeds } from "./ledger";
 import { getLatestSelfModel } from "./self-model";
+import {
+  driftAnalysis,
+  getVolatileFacts,
+  getLessons,
+  addLesson,
+  reframeMemory,
+  reliveMemory,
+} from "./mimir-cognitive";
+import { runHuginnScan, getHuginnInsights } from "./huginn";
+import { getYggdrasilVizSummary, buildYggdrasilGraph } from "./yggdrasil";
 
 export interface SaanActionResult {
   success: boolean;
@@ -86,6 +96,8 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_mindfulness":
     case "list_deeds":
     case "get_self_model":
+    case "get_cognitive_state":
+    case "get_memory_graph":
       return 1; // Tier 1: Auto-permitted read
 
     case "create_task":
@@ -97,6 +109,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "fulfill_wish":
     case "consolidate_memories":
     case "resolve_deed":
+    case "run_huginn_scan":
+    case "add_lesson":
+    case "reframe_memory":
+    case "relive_memory":
       return 2; // Tier 2: Staged mutation with 1-click rollback
 
     case "delete_task":
@@ -587,6 +603,134 @@ export function getSelfModelAction(): SaanActionResult {
 }
 
 /**
+ * Retrieves Mimir cognitive analysis, drift & bias reports, volatile facts, and lessons (Mimir pattern)
+ */
+export function getCognitiveStateAction(): SaanActionResult {
+  try {
+    const report = driftAnalysis();
+    const volatileFacts = getVolatileFacts();
+    const lessons = getLessons();
+    const insights = getHuginnInsights(5);
+
+    return {
+      success: true,
+      action: "get_cognitive_state",
+      tier: 1,
+      message: "Retrieved cognitive drift and memory substrate status",
+      data: {
+        driftReport: report,
+        volatileFactsCount: volatileFacts.length,
+        volatileFacts: volatileFacts.slice(0, 5),
+        lessonsCount: lessons.length,
+        lessons: lessons.slice(0, 5),
+        recentHuginnInsights: insights,
+      },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_cognitive_state", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Runs Huginn emergent pattern detection scan (Mimir pattern)
+ */
+export function runHuginnScanAction(): SaanActionResult {
+  try {
+    const newInsights = runHuginnScan();
+    return {
+      success: true,
+      action: "run_huginn_scan",
+      tier: 2,
+      message: `Huginn scan completed: discovered ${newInsights.length} emergent pattern insights`,
+      data: newInsights,
+    };
+  } catch (err: any) {
+    return { success: false, action: "run_huginn_scan", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Adds a learned procedural lesson or problem-solving strategy (Mimir pattern)
+ */
+export function addLessonAction(topic: string, strategy: string, importance = 5): SaanActionResult {
+  try {
+    if (!topic || !strategy) {
+      return { success: false, action: "add_lesson", tier: 2, message: "Missing topic or strategy" };
+    }
+    const lesson = addLesson(topic, strategy, Number(importance) || 5);
+    return {
+      success: true,
+      action: "add_lesson",
+      tier: 2,
+      message: `Recorded lesson: "${topic}"`,
+      data: lesson,
+    };
+  } catch (err: any) {
+    return { success: false, action: "add_lesson", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Re-appraises / reframes an emotional memory (Mimir intentional cognitive reappraisal)
+ */
+export function reframeMemoryAction(memoryId: number, newEmotion: string, reason?: string): SaanActionResult {
+  try {
+    if (!memoryId || !newEmotion) {
+      return { success: false, action: "reframe_memory", tier: 2, message: "Missing memoryId or newEmotion" };
+    }
+    const ok = reframeMemory(Number(memoryId), newEmotion, reason);
+    return {
+      success: ok,
+      action: "reframe_memory",
+      tier: 2,
+      message: ok ? `Successfully reframed memory #${memoryId} to "${newEmotion}"` : `Memory #${memoryId} not found`,
+    };
+  } catch (err: any) {
+    return { success: false, action: "reframe_memory", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Experientially re-enters past memory (Mimir Mental Time Travel)
+ */
+export function reliveMemoryAction(memoryId: number): SaanActionResult {
+  try {
+    if (!memoryId) {
+      return { success: false, action: "relive_memory", tier: 2, message: "Missing memoryId" };
+    }
+    const res = reliveMemory(Number(memoryId));
+    return {
+      success: res.success,
+      action: "relive_memory",
+      tier: 2,
+      message: res.success ? `Relived memory #${memoryId}: mood shifted toward encoding state` : `Memory #${memoryId} not found`,
+      data: res,
+    };
+  } catch (err: any) {
+    return { success: false, action: "relive_memory", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Retrieves Yggdrasil World Tree memory graph summary (Mimir pattern)
+ */
+export function getMemoryGraphAction(): SaanActionResult {
+  try {
+    buildYggdrasilGraph();
+    const summary = getYggdrasilVizSummary();
+    return {
+      success: true,
+      action: "get_memory_graph",
+      tier: 1,
+      message: `Retrieved Yggdrasil graph: ${summary.totalNodes} nodes, ${summary.totalEdges} edges`,
+      data: summary,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_memory_graph", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -625,6 +769,18 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return resolveDeedAction(params.deedId, params.resolution);
     case "get_self_model":
       return getSelfModelAction();
+    case "get_cognitive_state":
+      return getCognitiveStateAction();
+    case "run_huginn_scan":
+      return runHuginnScanAction();
+    case "add_lesson":
+      return addLessonAction(params.topic, params.strategy, params.importance);
+    case "reframe_memory":
+      return reframeMemoryAction(params.memoryId, params.newEmotion, params.reason);
+    case "relive_memory":
+      return reliveMemoryAction(params.memoryId);
+    case "get_memory_graph":
+      return getMemoryGraphAction();
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -634,7 +790,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph",
   "params": { ... }
 }
 \`\`\`
@@ -657,4 +813,10 @@ Params guide:
 - list_deeds: {}
 - resolve_deed: { "deedId": "d1", "resolution": "answered" | "dismissed" }
 - get_self_model: {}
+- get_cognitive_state: {}
+- run_huginn_scan: {}
+- add_lesson: { "topic": "topic string", "strategy": "strategy text", "importance": 1-10 }
+- reframe_memory: { "memoryId": 123, "newEmotion": "serene" | "hopeful", "reason": "optional" }
+- relive_memory: { "memoryId": 123 }
+- get_memory_graph: {}
 `;

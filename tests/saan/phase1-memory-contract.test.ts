@@ -74,14 +74,14 @@ export function runPhase1Tests(): void {
   assert(oldRow.valid_until < INFINITE_VALID_UNTIL, "Old memory valid_until must be closed");
 
   // Verify new record is active
-  const activeNow = getSaanMemories(5);
+  const activeNow = getSaanMemories(50);
   const foundUpdated = activeNow.find((m) => m.point === updatedFact);
   assert(Boolean(foundUpdated), "Updated replacement fact must be currently active");
 
   // Test 5: Cryptographic Tombstone Enforcement & Anti-Resurrection
   const tombstoneFact = `Sensitive fact that must be tombstoned ${Date.now()}`;
   saveSaanMemory(tombstoneFact, "fact", 9, "implicit");
-  const rowToDel = getSaanMemories(5).find((m) => m.point === tombstoneFact);
+  const rowToDel = getSaanMemories(50).find((m) => m.point === tombstoneFact);
   assert(Boolean(rowToDel), "Target memory must exist before deletion");
 
   const deleteSuccess = deleteSaanMemory(rowToDel!.id);

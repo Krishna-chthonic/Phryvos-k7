@@ -45,7 +45,7 @@ export function runPhase4Benchmark(): void {
     const start = performance.now();
 
     // Query active memories
-    const active = getSaanMemories(100);
+    const active = getSaanMemories(250);
     const end = performance.now();
     latencies.push(end - start);
 

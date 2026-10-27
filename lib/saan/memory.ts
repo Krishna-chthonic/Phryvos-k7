@@ -16,6 +16,12 @@ import {
   isMemoryTombstoned,
   hashMemoryContent,
 } from "@/lib/governance/data-ownership";
+import {
+  rankMemoriesComposite,
+  checkIsFlashbulb,
+  FLASHBULB_STABILITY_FLOOR,
+  INITIAL_STABILITY,
+} from "@/lib/saan/mimir-cognitive";
 
 export interface SaanMemory {
   id: number;
@@ -29,6 +35,18 @@ export interface SaanMemory {
   status: "active" | "superseded" | "deleted";
   sourceType: "explicit_directive" | "implicit" | "inferred";
   tombstoneHash?: string | null;
+  // Mimir Cognitive Extensions
+  vividness?: number;
+  stability?: number;
+  isFlashbulb?: boolean;
+  isAnchor?: boolean;
+  isCherished?: boolean;
+  isReframed?: boolean;
+  reframeReason?: string | null;
+  coActivationCount?: number;
+  lastRecalledAt?: number | null;
+  emotionPad?: [number, number, number] | null;
+  arcPosition?: string | null;
 }
 
 export const INFINITE_VALID_UNTIL = 253402300799000; // Year 9999-12-31 in ms
@@ -44,10 +62,18 @@ export function ensureSaanStorage(): void {
 /**
  * Retrieves active memories at a specific point in time (Bi-Temporal Query)
  * Valid at queryTime if: valid_since <= queryTime AND valid_until > queryTime AND status = 'active'
+ * If queryContext is provided, applies Mimir 5-Factor Composite Re-Ranking!
  */
-export function getSaanMemories(limit = 20, queryTime = Date.now()): SaanMemory[] {
+export function getSaanMemories(
+  limit = 20,
+  queryTime = Date.now(),
+  queryContext?: string,
+  currentMoodPad?: [number, number, number]
+): SaanMemory[] {
   try {
     const db = getDb();
+    const fetchLimit = queryContext ? Math.max(limit * 3, 50) : limit;
+
     const rows = db
       .prepare(`
         SELECT 
@@ -61,14 +87,40 @@ export function getSaanMemories(limit = 20, queryTime = Date.now()): SaanMemory[
           valid_until as validUntil,
           status,
           source_type as sourceType,
-          tombstone_hash as tombstoneHash
+          tombstone_hash as tombstoneHash,
+          vividness,
+          stability,
+          is_flashbulb as isFlashbulb,
+          is_anchor as isAnchor,
+          is_cherished as isCherished,
+          is_reframed as isReframed,
+          reframe_reason as reframeReason,
+          co_activation_count as coActivationCount,
+          last_recalled_at as lastRecalledAt,
+          emotion_pad as emotionPad,
+          arc_position as arcPosition
         FROM saan_memories 
         WHERE valid_since <= ? AND valid_until > ? AND status = 'active'
         ORDER BY importance DESC, created_at DESC 
         LIMIT ?
       `)
-      .all(queryTime, queryTime, limit) as SaanMemory[];
-    return rows;
+      .all(queryTime, queryTime, fetchLimit) as any[];
+
+    const mapped: SaanMemory[] = rows.map((r) => ({
+      ...r,
+      isFlashbulb: Boolean(r.isFlashbulb),
+      isAnchor: Boolean(r.isAnchor),
+      isCherished: Boolean(r.isCherished),
+      isReframed: Boolean(r.isReframed),
+      emotionPad: r.emotionPad ? JSON.parse(r.emotionPad) : null,
+    }));
+
+    if (queryContext && queryContext.trim().length > 0) {
+      const ranked = rankMemoriesComposite(mapped, queryContext, currentMoodPad);
+      return ranked.slice(0, limit).map((s) => s.memory);
+    }
+
+    return mapped.slice(0, limit);
   } catch (err) {
     console.warn("[SaanMemory] Error retrieving memories:", err);
     return [];
@@ -84,12 +136,14 @@ export function getMemoriesAtTimestamp(timestamp: number, limit = 20): SaanMemor
 
 /**
  * Saves a new permanent memory point with strict tombstone enforcement
+ * and Mimir flashbulb memory detection.
  */
 export function saveSaanMemory(
   point: string,
   category: SaanMemory["category"] = "general",
   importance = 5,
-  sourceType: SaanMemory["sourceType"] = "implicit"
+  sourceType: SaanMemory["sourceType"] = "implicit",
+  emotionPad?: [number, number, number] | null
 ): boolean {
   try {
     const db = getDb();
@@ -113,6 +167,12 @@ export function saveSaanMemory(
       .get(trimmed, now, now);
     if (existing) return false;
 
+    // 3. Mimir Flashbulb Memory Detection
+    const isFlashbulb = checkIsFlashbulb(importance, emotionPad);
+    const stability = isFlashbulb ? FLASHBULB_STABILITY_FLOOR : INITIAL_STABILITY;
+    const vividness = isFlashbulb ? 1.0 : 1.0;
+    const padJson = emotionPad ? JSON.stringify(emotionPad) : null;
+
     db.prepare(`
       INSERT INTO saan_memories (
         point, 
@@ -123,9 +183,25 @@ export function saveSaanMemory(
         valid_since, 
         valid_until, 
         status, 
-        source_type
-      ) VALUES (?, ?, 1.0, ?, ?, ?, ?, 'active', ?)
-    `).run(trimmed, category, importance, now, now, INFINITE_VALID_UNTIL, sourceType);
+        source_type,
+        vividness,
+        stability,
+        is_flashbulb,
+        emotion_pad
+      ) VALUES (?, ?, 1.0, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+    `).run(
+      trimmed,
+      category,
+      importance,
+      now,
+      now,
+      INFINITE_VALID_UNTIL,
+      sourceType,
+      vividness,
+      stability,
+      isFlashbulb ? 1 : 0,
+      padJson
+    );
 
     return true;
   } catch (err) {

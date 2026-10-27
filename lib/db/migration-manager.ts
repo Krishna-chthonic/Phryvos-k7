@@ -316,6 +316,82 @@ export const MIGRATION_STEPS: MigrationStep[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: "0007_saan_mimir_extraction",
+    up: (db) => {
+      // 1. Cognitive columns on saan_memories (Mimir models.py pattern)
+      const memCols = [
+        "vividness REAL DEFAULT 1.0",
+        "stability REAL DEFAULT 3.0",
+        "is_flashbulb INTEGER DEFAULT 0",
+        "is_anchor INTEGER DEFAULT 0",
+        "is_cherished INTEGER DEFAULT 0",
+        "is_reframed INTEGER DEFAULT 0",
+        "reframe_reason TEXT",
+        "co_activation_count INTEGER DEFAULT 0",
+        "last_recalled_at INTEGER",
+        "emotion_pad TEXT",
+        "arc_position TEXT"
+      ];
+      for (const col of memCols) {
+        try {
+          db.exec(`ALTER TABLE saan_memories ADD COLUMN ${col}`);
+        } catch {
+          // column already exists
+        }
+      }
+
+      // 2. Volatile 12-hour Short-Term Facts (Mimir volatile fact pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_volatile_facts (
+          id TEXT PRIMARY KEY,
+          entity TEXT NOT NULL,
+          attribute TEXT NOT NULL,
+          value TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_volatile_exp ON saan_volatile_facts(expires_at);
+      `);
+
+      // 3. Procedural Lessons & Solutions (Mimir tasks_mixin.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_lessons (
+          id TEXT PRIMARY KEY,
+          topic TEXT NOT NULL,
+          strategy TEXT NOT NULL,
+          importance INTEGER NOT NULL DEFAULT 5,
+          reuse_count INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+      `);
+
+      // 4. Huginn Emergent Insights (Mimir neuroscience_mixin.py Huginn pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_huginn_insights (
+          id TEXT PRIMARY KEY,
+          type TEXT NOT NULL,
+          entity TEXT,
+          insight TEXT NOT NULL,
+          confidence REAL NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_huginn_entity ON saan_huginn_insights(entity);
+      `);
+
+      // 5. Yggdrasil Memory Graph Edges (Mimir yggdrasil_mixin.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_yggdrasil_edges (
+          source_id INTEGER NOT NULL,
+          target_id INTEGER NOT NULL,
+          edge_type TEXT NOT NULL,
+          weight REAL NOT NULL,
+          PRIMARY KEY (source_id, target_id, edge_type)
+        );
+      `);
+    },
+  },
 ];
 
 /**

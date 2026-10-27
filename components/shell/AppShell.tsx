@@ -31,6 +31,7 @@ import { FloatingAssistant } from "@/components/shell/FloatingAssistant";
 
 const NAV_ITEMS = [
   { href: "/chat", label: "Chat", icon: MessageSquare, shortcut: "1" },
+  { href: "/saan", label: "Saan", icon: Sparkles, shortcut: "0" },
   { href: "/vault", label: "Files", icon: Folder, shortcut: "2" },
   { href: "/workflows", label: "Flows", icon: Workflow, shortcut: "3" },
   { href: "/dots", label: "Dots", icon: Bot, shortcut: "4" },

@@ -44,6 +44,7 @@ interface ChatMessage {
   text: string;
   time: string;
   action?: ActionPayload | null;
+  reaction?: string | null;
 }
 
 interface SaanProfile {
@@ -56,6 +57,12 @@ interface SaanProfile {
   circadianState: "sleep" | "morning_chai" | "work_focus" | "evening_unwind";
   bondStage: string;
   bondScore: number;
+  relationship?: {
+    temperature: number;
+    trust: number;
+    intimacy: number;
+    understanding: number;
+  };
 }
 
 interface MemoryItem {
@@ -87,7 +94,7 @@ export function SaanChat() {
   const [loading, setLoading] = React.useState(false);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
-  const [drawerTab, setDrawerTab] = React.useState<"soul" | "memories" | "diary" | "controller">("soul");
+  const [drawerTab, setDrawerTab] = React.useState<"soul" | "memories" | "diary" | "controller" | "dates" | "wishes">("soul");
 
   // Voice TTS & STT
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
@@ -98,6 +105,8 @@ export function SaanChat() {
   const [diary, setDiary] = React.useState<DiaryItem[]>([]);
   const [recentTasks, setRecentTasks] = React.useState<any[]>([]);
   const [upcomingEvents, setUpcomingEvents] = React.useState<any[]>([]);
+  const [personalDates, setPersonalDates] = React.useState<any[]>([]);
+  const [wishes, setWishes] = React.useState<any[]>([]);
   const [newMemoryInput, setNewMemoryInput] = React.useState("");
 
   const [profile, setProfile] = React.useState<SaanProfile>({
@@ -126,6 +135,8 @@ export function SaanChat() {
           if (d.diary) setDiary(d.diary);
           if (d.recentTasks) setRecentTasks(d.recentTasks);
           if (d.upcomingEvents) setUpcomingEvents(d.upcomingEvents);
+          if (d.personalDates) setPersonalDates(d.personalDates);
+          if (d.wishes) setWishes(d.wishes);
         }
       })
       .catch(() => {});
@@ -309,14 +320,40 @@ export function SaanChat() {
       const data = await res.json();
       if (data.ok) {
         if (data.profile) setProfile(data.profile);
-        const newMsg: ChatMessage = {
-          id: String(Date.now() + 1),
-          sender: "saan",
-          text: data.reply,
-          action: data.action || null,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        };
-        setMessages((prev) => [...prev, newMsg]);
+
+        // HerAndHim multi-bubble burst delivery
+        if (Array.isArray(data.bubbles) && data.bubbles.length > 1) {
+          const newMsgs: ChatMessage[] = data.bubbles.map((b: string, i: number) => ({
+            id: String(Date.now() + 1 + i),
+            sender: "saan",
+            text: b,
+            action: i === data.bubbles.length - 1 ? (data.action || null) : null,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          }));
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (data.reaction && updated.length > 0 && updated[updated.length - 1].sender === "user") {
+              updated[updated.length - 1] = { ...updated[updated.length - 1], reaction: data.reaction };
+            }
+            return [...updated, ...newMsgs];
+          });
+        } else {
+          const newMsg: ChatMessage = {
+            id: String(Date.now() + 1),
+            sender: "saan",
+            text: data.reply,
+            action: data.action || null,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          };
+          setMessages((prev) => {
+            const updated = [...prev];
+            if (data.reaction && updated.length > 0 && updated[updated.length - 1].sender === "user") {
+              updated[updated.length - 1] = { ...updated[updated.length - 1], reaction: data.reaction };
+            }
+            return [...updated, newMsg];
+          });
+        }
+
         speakText(data.reply);
         refreshSoulData();
       } else {
@@ -358,6 +395,28 @@ export function SaanChat() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete_memory", id }),
+      });
+      refreshSoulData();
+    } catch {}
+  };
+
+  const handleDeleteDate = async (id: string) => {
+    try {
+      await fetch("/api/saan/soul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete_date", id }),
+      });
+      refreshSoulData();
+    } catch {}
+  };
+
+  const handleFulfillWish = async (wishId: string) => {
+    try {
+      await fetch("/api/saan/soul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fulfill_wish", wishId }),
       });
       refreshSoulData();
     } catch {}
@@ -602,9 +661,17 @@ export function SaanChat() {
                       </div>
                     )}
 
-                    {/* User Timestamp */}
+                    {/* User Timestamp & Emoji Reaction Badge (HerAndHim pattern) */}
                     {isUser && (
-                      <div className="mt-1 text-right">
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        {m.reaction ? (
+                          <span
+                            className="bg-white/90 dark:bg-zinc-800/90 border border-zinc-200 dark:border-zinc-700 rounded-full px-1.5 py-0.5 text-xs shadow-2xs select-none"
+                            title="Saan's reaction"
+                          >
+                            {m.reaction}
+                          </span>
+                        ) : <span />}
                         <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
                           {m.time}
                         </span>
@@ -703,11 +770,11 @@ export function SaanChat() {
           </div>
 
           {/* Drawer Navigation Tabs */}
-          <div className="flex border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-900/60 text-[11px] font-medium p-1 gap-1">
+          <div className="grid grid-cols-6 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/60 dark:bg-zinc-900/60 text-[10px] font-medium p-1 gap-0.5">
             <button
               type="button"
               onClick={() => setDrawerTab("soul")}
-              className={`flex-1 py-1.5 rounded-md text-center transition ${
+              className={`py-1.5 rounded-md text-center transition ${
                 drawerTab === "soul"
                   ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
                   : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -718,18 +785,40 @@ export function SaanChat() {
             <button
               type="button"
               onClick={() => setDrawerTab("memories")}
-              className={`flex-1 py-1.5 rounded-md text-center transition ${
+              className={`py-1.5 rounded-md text-center transition ${
                 drawerTab === "memories"
                   ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
                   : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
               }`}
             >
-              Memories ({memories.length})
+              Mem ({memories.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("dates")}
+              className={`py-1.5 rounded-md text-center transition ${
+                drawerTab === "dates"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Dates ({personalDates.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setDrawerTab("wishes")}
+              className={`py-1.5 rounded-md text-center transition ${
+                drawerTab === "wishes"
+                  ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
+                  : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+              }`}
+            >
+              Wish ({wishes.length})
             </button>
             <button
               type="button"
               onClick={() => setDrawerTab("diary")}
-              className={`flex-1 py-1.5 rounded-md text-center transition ${
+              className={`py-1.5 rounded-md text-center transition ${
                 drawerTab === "diary"
                   ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
                   : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -740,13 +829,13 @@ export function SaanChat() {
             <button
               type="button"
               onClick={() => setDrawerTab("controller")}
-              className={`flex-1 py-1.5 rounded-md text-center transition ${
+              className={`py-1.5 rounded-md text-center transition ${
                 drawerTab === "controller"
                   ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-2xs font-semibold"
                   : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
               }`}
             >
-              Control
+              Ctrl
             </button>
           </div>
 
@@ -811,6 +900,31 @@ export function SaanChat() {
                     </div>
                   </div>
                 </div>
+
+                {/* 4D Relationship Dynamics (HerAndHim pattern) */}
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3.5 space-y-2.5 shadow-2xs">
+                  <span className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider block">
+                    4D Relationship Dynamics
+                  </span>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="p-2 rounded-lg bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200/50 dark:border-orange-900/30">
+                      <span className="text-zinc-500 block text-[10px]">Warmth</span>
+                      <span className="font-semibold text-orange-600 dark:text-orange-400">{profile.relationship?.temperature ?? 50}°</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-900/30">
+                      <span className="text-zinc-500 block text-[10px]">Trust</span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">{profile.relationship?.trust ?? 50}%</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-pink-50/60 dark:bg-pink-950/20 border border-pink-200/50 dark:border-pink-900/30">
+                      <span className="text-zinc-500 block text-[10px]">Intimacy</span>
+                      <span className="font-semibold text-pink-600 dark:text-pink-400">{profile.relationship?.intimacy ?? 50}%</span>
+                    </div>
+                    <div className="p-2 rounded-lg bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/50 dark:border-purple-900/30">
+                      <span className="text-zinc-500 block text-[10px]">Understanding</span>
+                      <span className="font-semibold text-purple-600 dark:text-purple-400">{profile.relationship?.understanding ?? 50}%</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -863,6 +977,96 @@ export function SaanChat() {
                   {memories.length === 0 && (
                     <p className="text-center text-zinc-400 py-6 text-xs">
                       No memories yet. Talk with Saan and she will organically remember important details!
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2.5: PERSONAL DATES (HerAndHim Anticipation) */}
+            {drawerTab === "dates" && (
+              <div className="space-y-3">
+                <span className="text-[11px] text-zinc-500 block">
+                  Important life dates Saan anticipates and checks in on:
+                </span>
+                <div className="space-y-2">
+                  {personalDates.map((d: any) => (
+                    <div
+                      key={d.id}
+                      className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2.5 flex items-center justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{d.label}</span>
+                          {d.recurring && (
+                            <span className="text-[9px] font-mono bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 px-1 py-0.5 rounded">
+                              Yearly
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-zinc-400 font-mono block">📅 {d.date}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDate(d.id)}
+                        className="opacity-0 group-hover:opacity-100 text-zinc-400 hover:text-red-500 transition p-1"
+                        title="Delete date"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {personalDates.length === 0 && (
+                    <p className="text-center text-zinc-400 py-6 text-xs">
+                      No personal dates tracked. Tell Saan &quot;Remember my birthday is March 3rd&quot; or &quot;Interview on Friday&quot;!
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2.6: WISHLIST (HerAndHim Wishlist Engine) */}
+            {drawerTab === "wishes" && (
+              <div className="space-y-3">
+                <span className="text-[11px] text-zinc-500 block">
+                  Things you wished for that Saan proactively surfaces:
+                </span>
+                <div className="space-y-2">
+                  {wishes.map((w: any) => (
+                    <div
+                      key={w.id}
+                      className="group rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-2.5 flex items-center justify-between gap-2 shadow-2xs"
+                    >
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-zinc-800 dark:text-zinc-200">&ldquo;{w.text}&rdquo;</p>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[9px] font-mono px-1 py-0.5 rounded uppercase ${
+                            w.urgency === "high"
+                              ? "bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400"
+                              : w.urgency === "medium"
+                              ? "bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+                              : "bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400"
+                          }`}>
+                            {w.urgency}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            {w.surfaceCount > 0 ? `Surfaced ${w.surfaceCount}x` : "Pending surface"}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleFulfillWish(w.id)}
+                        className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded px-1.5 py-1 transition flex items-center gap-1 shrink-0"
+                        title="Mark wish fulfilled"
+                      >
+                        <Check className="h-3 w-3" /> Done
+                      </button>
+                    </div>
+                  ))}
+                  {wishes.length === 0 && (
+                    <p className="text-center text-zinc-400 py-6 text-xs">
+                      No wishes pending. Tell Saan &quot;I want to try sushi soon&quot; or &quot;Plan a trip to Manali&quot;!
                     </p>
                   )}
                 </div>

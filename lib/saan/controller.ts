@@ -9,6 +9,8 @@
  */
 
 import { getDb } from "@/lib/db/client";
+import { addPersonalDate, listPersonalDates, deletePersonalDate } from "./personal-dates";
+import { addWish, listPendingWishes, markWishFulfilled, markWishDismissed } from "./wishlist";
 
 export interface SaanActionResult {
   success: boolean;
@@ -75,12 +77,17 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "list_events":
     case "search_web":
     case "search_notes":
+    case "list_dates":
+    case "list_wishes":
       return 1; // Tier 1: Auto-permitted read
 
     case "create_task":
     case "complete_task":
     case "create_event":
     case "create_goal":
+    case "remember_date":
+    case "add_wish":
+    case "fulfill_wish":
       return 2; // Tier 2: Staged mutation with 1-click rollback
 
     case "delete_task":
@@ -363,11 +370,143 @@ export async function searchWeb(query: string): Promise<SaanActionResult> {
   }
 }
 
+/**
+ * Records a personal date (HerAndHim pattern)
+ */
+export function recordPersonalDateAction(
+  date: string,
+  label: string,
+  recurring = false,
+  notes?: string
+): SaanActionResult {
+  try {
+    const item = addPersonalDate(date, label, recurring, notes);
+    return {
+      success: true,
+      action: "remember_date",
+      tier: 2,
+      message: `Remembered date: "${label}" on ${date}${recurring ? " (recurring yearly)" : ""}`,
+      data: item,
+    };
+  } catch (err: any) {
+    return { success: false, action: "remember_date", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Lists personal dates (HerAndHim pattern)
+ */
+export function listPersonalDatesAction(): SaanActionResult {
+  try {
+    const dates = listPersonalDates();
+    return {
+      success: true,
+      action: "list_dates",
+      tier: 1,
+      message: `Found ${dates.length} personal dates`,
+      data: dates,
+    };
+  } catch (err: any) {
+    return { success: false, action: "list_dates", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Adds a user wish (HerAndHim pattern)
+ */
+export function addWishAction(
+  text: string,
+  urgency: "low" | "medium" | "high" = "medium"
+): SaanActionResult {
+  try {
+    const wish = addWish(text, urgency);
+    return {
+      success: true,
+      action: "add_wish",
+      tier: 2,
+      message: `Added to wishlist: "${text}" [urgency: ${urgency}]`,
+      data: wish,
+    };
+  } catch (err: any) {
+    return { success: false, action: "add_wish", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Fulfills a wish (HerAndHim pattern)
+ */
+export function fulfillWishAction(wishId: string): SaanActionResult {
+  try {
+    const success = markWishFulfilled(wishId);
+    return {
+      success,
+      action: "fulfill_wish",
+      tier: 2,
+      message: success ? `Wish ${wishId} marked fulfilled! 🎉` : `Wish ${wishId} not found or not pending`,
+      data: { wishId, fulfilled: success },
+    };
+  } catch (err: any) {
+    return { success: false, action: "fulfill_wish", tier: 2, message: err.message };
+  }
+}
+
+/**
+ * Lists pending wishes (HerAndHim pattern)
+ */
+export function listWishesAction(): SaanActionResult {
+  try {
+    const wishes = listPendingWishes();
+    return {
+      success: true,
+      action: "list_wishes",
+      tier: 1,
+      message: `Found ${wishes.length} pending wishes`,
+      data: wishes,
+    };
+  } catch (err: any) {
+    return { success: false, action: "list_wishes", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Universal Action Dispatcher
+ */
+export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
+  switch (action) {
+    case "create_task":
+      return createTask(params.title, params.description, params.priority, params.dueDate);
+    case "list_tasks":
+      return listTasks(params.status, params.limit);
+    case "complete_task":
+      return completeTask(Number(params.taskId));
+    case "create_event":
+      return createCalendarEvent(params.title, params.startAt, params.notes);
+    case "list_events":
+      return listUpcomingEvents(params.limit);
+    case "create_goal":
+      return createGoal(params.title, params.targetDate, params.description);
+    case "search_web":
+      return await searchWeb(params.query);
+    case "remember_date":
+      return recordPersonalDateAction(params.date, params.label, Boolean(params.recurring), params.notes);
+    case "list_dates":
+      return listPersonalDatesAction();
+    case "add_wish":
+      return addWishAction(params.text, params.urgency);
+    case "fulfill_wish":
+      return fulfillWishAction(params.wishId);
+    case "list_wishes":
+      return listWishesAction();
+    default:
+      return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
+  }
+}
+
 export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes",
   "params": { ... }
 }
 \`\`\`
@@ -380,4 +519,9 @@ Params guide:
 - list_events: {}
 - create_goal: { "title": "Goal title", "targetDate": "YYYY-MM-DD", "description": "optional" }
 - search_web: { "query": "search query" }
+- remember_date: { "date": "YYYY-MM-DD" | "MM-DD", "label": "Birthday / Exam", "recurring": true | false, "notes": "optional" }
+- list_dates: {}
+- add_wish: { "text": "Things user wants to do / buy / visit", "urgency": "low" | "medium" | "high" }
+- fulfill_wish: { "wishId": "id_string" }
+- list_wishes: {}
 `;

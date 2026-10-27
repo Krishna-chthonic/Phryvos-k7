@@ -136,6 +136,70 @@ export const MIGRATION_STEPS: MigrationStep[] = [
       `);
     },
   },
+  {
+    version: 4,
+    name: "0004_saan_herandhim_extraction",
+    up: (db: Database.Database) => {
+      // 1. Personal Dates Table (HerAndHim personal_dates.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_personal_dates (
+          id TEXT PRIMARY KEY,
+          date TEXT NOT NULL,
+          label TEXT NOT NULL,
+          recurring INTEGER NOT NULL DEFAULT 0,
+          notes TEXT,
+          created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_personal_dates_date ON saan_personal_dates(date);
+      `);
+
+      // 2. Long-Running Wishlist Table (HerAndHim wishlist.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_wishlist (
+          id TEXT PRIMARY KEY,
+          text TEXT NOT NULL,
+          urgency TEXT NOT NULL DEFAULT 'medium',
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_at INTEGER NOT NULL,
+          fulfilled_at INTEGER,
+          last_surfaced_at INTEGER,
+          surface_count INTEGER NOT NULL DEFAULT 0,
+          context_json TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_wishlist_status ON saan_wishlist(status);
+      `);
+
+      // 3. 4D Relationship Store Singleton (HerAndHim emotional_graph.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_relationship (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          temperature REAL NOT NULL DEFAULT 50.0,
+          trust REAL NOT NULL DEFAULT 50.0,
+          intimacy REAL NOT NULL DEFAULT 50.0,
+          understanding REAL NOT NULL DEFAULT 50.0,
+          first_chat_date TEXT,
+          total_turns INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL
+        );
+        INSERT OR IGNORE INTO saan_relationship (id, temperature, trust, intimacy, understanding, first_chat_date, total_turns, updated_at)
+        VALUES (1, 50.0, 50.0, 50.0, 50.0, date('now'), 0, (strftime('%s', 'now') * 1000));
+      `);
+
+      // 4. Emotional Time-Series Event Ledger (HerAndHim emotional_graph.py pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_emotional_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp INTEGER NOT NULL,
+          sentiment TEXT NOT NULL,
+          intensity REAL NOT NULL,
+          topic TEXT,
+          summary TEXT,
+          follow_up INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_saan_emotional_events_ts ON saan_emotional_events(timestamp);
+      `);
+    },
+  },
 ];
 
 /**

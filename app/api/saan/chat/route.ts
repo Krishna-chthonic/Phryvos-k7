@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSaanProfile, buildSaanSystemPrompt, sanitizeSaanOutput } from "@/lib/saan/soul";
+import {
+  getSaanProfile,
+  buildSaanSystemPrompt,
+  sanitizeSaanOutput,
+  updateRelationshipFromSentiment,
+} from "@/lib/saan/soul";
 import {
   getSaanMemories,
   extractMemoriesFromTurn,
@@ -8,17 +13,14 @@ import {
 } from "@/lib/saan/memory";
 import {
   SAAN_TOOLS_SPEC,
-  createTask,
-  listTasks,
-  completeTask,
-  createCalendarEvent,
-  listUpcomingEvents,
-  createGoal,
-  searchWeb,
   parseDirtyJson,
   executeRollback,
+  dispatchSaanAction,
   type SaanActionResult,
 } from "@/lib/saan/controller";
+import { checkCrisisSignals } from "@/lib/saan/safety";
+import { recordUserReplied } from "@/lib/saan/proactive";
+import { pickReaction, splitBurst, calculateReplyDelay } from "@/lib/saan/humanize";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -43,6 +45,26 @@ export async function POST(req: NextRequest) {
     if (!userMessage || typeof userMessage !== "string") {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
+
+    // 0. Tier-0 Deterministic Crisis Safety Guardrail (HerAndHim safety.py pattern)
+    const crisisCheck = checkCrisisSignals(userMessage);
+    if (crisisCheck.isCrisis && crisisCheck.response) {
+      return NextResponse.json({
+        ok: true,
+        reply: crisisCheck.response,
+        reaction: "🥺",
+        bubbles: [crisisCheck.response],
+        delayMs: 300,
+        action: null,
+        profile: getSaanProfile(getBondScore()),
+      });
+    }
+
+    // Record user activity to clear unanswered proactive streak
+    recordUserReplied();
+
+    // Calculate selective pre-reply emoji reaction (HerAndHim humanize.py pattern)
+    const reaction = pickReaction(userMessage);
 
     // 1. Extract and store any new memories from the user's message (Mem0 / Memobase)
     extractMemoriesFromTurn(userMessage);
@@ -158,26 +180,8 @@ export async function POST(req: NextRequest) {
     const actionMatch = reply.match(/```saan_action\s*([\s\S]*?)\s*```/);
     if (actionMatch) {
       const parsed = parseDirtyJson(actionMatch[1]);
-      if (parsed) {
-        const act = parsed.action;
-        const params = parsed.params || {};
-
-        if (act === "create_task") {
-          actionExecuted = createTask(params.title, params.description, params.priority, params.dueDate);
-        } else if (act === "list_tasks") {
-          actionExecuted = listTasks(params.status);
-        } else if (act === "complete_task") {
-          actionExecuted = completeTask(params.taskId);
-        } else if (act === "create_event") {
-          actionExecuted = createCalendarEvent(params.title, params.startAt, params.endAt, params.notes);
-        } else if (act === "list_events") {
-          actionExecuted = listUpcomingEvents();
-        } else if (act === "create_goal") {
-          actionExecuted = createGoal(params.title, params.targetDate, params.description);
-        } else if (act === "search_web") {
-          actionExecuted = await searchWeb(params.query);
-        }
-
+      if (parsed && parsed.action) {
+        actionExecuted = await dispatchSaanAction(parsed.action, parsed.params || {});
         // Clean out the raw action block from the chat reply text
         reply = reply.replace(/```saan_action[\s\S]*?```/, "").trim();
       }
@@ -186,11 +190,26 @@ export async function POST(req: NextRequest) {
     // 5. Post-Generation Anti-AI Cliché Sanitization (SillyTavern pattern)
     reply = sanitizeSaanOutput(reply);
 
+    // 6. HerAndHim Multi-Bubble Burst & Reply Pacing Toolkit
+    const bubbles = splitBurst(reply);
+    const delayMs = calculateReplyDelay(reply);
+
+    // 7. Update 4D Relationship Tensor based on Turn Sentiment (HerAndHim pattern)
+    const sentiment = /(\bgood\b|great|love|happy|awesome|mast|badhai|shandar|thank)/i.test(userMessage)
+      ? "positive"
+      : /(\bbad\b|terrible|sad|angry|gussa|dukhi|upset|hate)/i.test(userMessage)
+      ? "negative"
+      : "neutral";
+    updateRelationshipFromSentiment(sentiment, 0.5);
+
     const updatedProfile = getSaanProfile(bondScore);
 
     return NextResponse.json({
       ok: true,
       reply,
+      bubbles,
+      delayMs,
+      reaction,
       action: actionExecuted,
       profile: updatedProfile,
     });

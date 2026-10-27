@@ -104,8 +104,8 @@ export function runPhase1Tests(): void {
   const realTaskId = Number(taskRes.lastInsertRowid);
 
   const taskMemoryFact = `Task context note ${Date.now()}`;
-  saveSaanMemory(taskMemoryFact, "fact", 7);
-  const taskMem = getSaanMemories(5).find((m) => m.point === taskMemoryFact)!;
+  saveSaanMemory(taskMemoryFact, "fact", 10);
+  const taskMem = getSaanMemories(100).find((m) => m.point === taskMemoryFact)!;
 
   linkTaskMemory(realTaskId, taskMem.id);
   const linked = getTaskMemories(realTaskId);

@@ -34,6 +34,14 @@ export interface SaanMemory {
 export const INFINITE_VALID_UNTIL = 253402300799000; // Year 9999-12-31 in ms
 
 /**
+ * Storage is managed deterministically via migration step 0003 in lib/db/migration-manager.ts.
+ * Kept as an export for backward compatibility with diary services.
+ */
+export function ensureSaanStorage(): void {
+  // Migrations run automatically on getDb()
+}
+
+/**
  * Retrieves active memories at a specific point in time (Bi-Temporal Query)
  * Valid at queryTime if: valid_since <= queryTime AND valid_until > queryTime AND status = 'active'
  */

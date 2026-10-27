@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSaanProfile, buildSaanSystemPrompt } from "@/lib/saan/soul";
+import { getSaanProfile, buildSaanSystemPrompt, sanitizeSaanOutput } from "@/lib/saan/soul";
 import {
   getSaanMemories,
   extractMemoriesFromTurn,
@@ -15,6 +15,8 @@ import {
   listUpcomingEvents,
   createGoal,
   searchWeb,
+  parseDirtyJson,
+  executeRollback,
   type SaanActionResult,
 } from "@/lib/saan/controller";
 import { requireVault } from "@/server/vault-guard";
@@ -28,6 +30,13 @@ interface IncomingMessage {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+
+    // Check if this is a rollback request
+    if (body.type === "rollback" && body.snapshotId) {
+      const rollbackRes = executeRollback(body.snapshotId);
+      return NextResponse.json({ ok: rollbackRes.success, message: rollbackRes.message });
+    }
+
     const userMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 
@@ -35,10 +44,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    // 1. Extract and store any new memories from the user's message
+    // 1. Extract and store any new memories from the user's message (Mem0 / Memobase)
     extractMemoriesFromTurn(userMessage);
 
-    // 2. Load context: bond score & memories
+    // 2. Load context: bond score & active bi-temporal memories (Graphiti / Datapace)
     const bondScore = bumpBondScore(1);
     const memories = getSaanMemories(12).map((m) => m.point);
 
@@ -144,12 +153,12 @@ export async function POST(req: NextRequest) {
         : `Hey... main abhi ${p.activity.toLowerCase()} kar rahi thi aur connection thoda atak gaya. Kya bol rahe the?`;
     }
 
-    // 4. Check for Action Blocks (`saan_action`) in the reply
+    // 4. Check for Action Blocks (`saan_action`) in the reply using DirtyJson (Agent Zero pattern)
     let actionExecuted: SaanActionResult | null = null;
     const actionMatch = reply.match(/```saan_action\s*([\s\S]*?)\s*```/);
     if (actionMatch) {
-      try {
-        const parsed = JSON.parse(actionMatch[1]);
+      const parsed = parseDirtyJson(actionMatch[1]);
+      if (parsed) {
         const act = parsed.action;
         const params = parsed.params || {};
 
@@ -171,10 +180,11 @@ export async function POST(req: NextRequest) {
 
         // Clean out the raw action block from the chat reply text
         reply = reply.replace(/```saan_action[\s\S]*?```/, "").trim();
-      } catch (err) {
-        console.warn("[SaanController] Action parse failed:", err);
       }
     }
+
+    // 5. Post-Generation Anti-AI Cliché Sanitization (SillyTavern pattern)
+    reply = sanitizeSaanOutput(reply);
 
     const updatedProfile = getSaanProfile(bondScore);
 

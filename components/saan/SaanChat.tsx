@@ -33,6 +33,8 @@ interface ActionPayload {
   success: boolean;
   action: string;
   message: string;
+  tier?: 1 | 2 | 3;
+  snapshotId?: string;
   data?: any;
 }
 
@@ -168,20 +170,27 @@ export function SaanChat() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Text to Speech
+  // Text to Speech with Barge-In Interruption Support
+  const stopSpeech = () => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   const speakText = (text: string) => {
     if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
-      window.speechSynthesis.cancel();
+      stopSpeech();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
+      utterance.rate = profile.isSleeping ? 0.9 : 1.0;
       utterance.pitch = 1.1; // Gentle, warmer voice
       window.speechSynthesis.speak(utterance);
     } catch {}
   };
 
-  // Speech to Text (Mic input)
+  // Speech to Text (Mic input) with Barge-In Interruption
   const toggleSpeechRecognition = () => {
+    stopSpeech(); // Immediately interrupt AI speech when user activates mic
     if (typeof window === "undefined") return;
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -201,7 +210,10 @@ export function SaanChat() {
       recognition.continuous = false;
       recognition.interimResults = false;
 
-      recognition.onstart = () => setIsListening(true);
+      recognition.onstart = () => {
+        stopSpeech();
+        setIsListening(true);
+      };
       recognition.onend = () => setIsListening(false);
       recognition.onerror = () => setIsListening(false);
       recognition.onresult = (event: any) => {
@@ -214,6 +226,34 @@ export function SaanChat() {
       recognition.start();
     } catch {
       setIsListening(false);
+    }
+  };
+
+  // 1-Click Rollback Handler (OpenHands pattern)
+  const handleUndo = async (snapshotId: string) => {
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "rollback", snapshotId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: String(Date.now()),
+            sender: "saan",
+            text: `Action undone: ${data.message || "Reverted successfully!"}`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+        refreshSoulData();
+      } else {
+        alert(data.message || "Could not undo action");
+      }
+    } catch {
+      alert("Network error executing rollback");
     }
   };
 
@@ -251,6 +291,7 @@ export function SaanChat() {
 
     setMessages((prev) => [...prev, userMsg]);
     if (!customText) setInput("");
+    stopSpeech(); // Barge-in interruption: stop speaking when user sends a new message
     setLoading(true);
 
     try {
@@ -536,14 +577,28 @@ export function SaanChat() {
                       {m.text}
                     </div>
 
-                    {/* Action Execution Pill Card (Controller tool trigger) */}
+                    {/* Action Execution Pill Card with 1-Click Rollback (OpenHands pattern) */}
                     {m.action && (
-                      <div className="mt-2.5 rounded-lg border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 text-xs text-purple-900 dark:text-purple-200 flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
-                        <span className="font-medium flex-1">{m.action.message}</span>
-                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-purple-200/50 dark:bg-purple-900/50">
-                          {m.action.action}
-                        </span>
+                      <div className="mt-2.5 rounded-lg border border-purple-200/80 dark:border-purple-900/60 bg-purple-50/70 dark:bg-purple-950/30 p-2.5 text-xs text-purple-900 dark:text-purple-200 flex flex-col gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-purple-600 dark:text-purple-400 shrink-0" />
+                          <span className="font-medium flex-1">{m.action.message}</span>
+                          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-purple-200/50 dark:bg-purple-900/50">
+                            {m.action.action}
+                          </span>
+                        </div>
+                        {m.action.snapshotId && (
+                          <div className="flex justify-end pt-1 border-t border-purple-200/40 dark:border-purple-800/40">
+                            <button
+                              type="button"
+                              onClick={() => handleUndo(m.action!.snapshotId!)}
+                              className="text-[11px] font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 flex items-center gap-1 active:scale-95 transition"
+                              title="Revert this action immediately"
+                            >
+                              <RotateCcw className="h-3 w-3" /> Undo / Revert
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 

@@ -49,6 +49,93 @@ export const MIGRATION_STEPS: MigrationStep[] = [
       `);
     },
   },
+  {
+    version: 3,
+    name: "0003_saan_bitemporal_leases_checkpoints",
+    up: (db: Database.Database) => {
+      // 1. Ensure saan_memories exists with baseline
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_memories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          point TEXT NOT NULL,
+          category TEXT DEFAULT 'general',
+          confidence REAL DEFAULT 1.0,
+          importance INTEGER DEFAULT 5,
+          created_at INTEGER NOT NULL
+        );
+      `);
+
+      // Check existing columns to dynamically add bi-temporal fields
+      const tableInfo = db.prepare("PRAGMA table_info('saan_memories')").all() as Array<{ name: string }>;
+      const existingCols = new Set(tableInfo.map((c) => c.name));
+
+      if (!existingCols.has("valid_since")) {
+        db.exec("ALTER TABLE saan_memories ADD COLUMN valid_since INTEGER NOT NULL DEFAULT 0");
+        db.exec("UPDATE saan_memories SET valid_since = created_at WHERE valid_since = 0");
+      }
+      if (!existingCols.has("valid_until")) {
+        db.exec("ALTER TABLE saan_memories ADD COLUMN valid_until INTEGER NOT NULL DEFAULT 253402300799000");
+      }
+      if (!existingCols.has("status")) {
+        db.exec("ALTER TABLE saan_memories ADD COLUMN status TEXT NOT NULL DEFAULT 'active'");
+      }
+      if (!existingCols.has("source_type")) {
+        db.exec("ALTER TABLE saan_memories ADD COLUMN source_type TEXT NOT NULL DEFAULT 'implicit'");
+      }
+      if (!existingCols.has("tombstone_hash")) {
+        db.exec("ALTER TABLE saan_memories ADD COLUMN tombstone_hash TEXT");
+      }
+
+      // Indices for sub-5ms temporal queries (Datapace Benchmark recommendation)
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_saan_mem_temporal ON saan_memories(valid_since, valid_until, status);
+        CREATE INDEX IF NOT EXISTS idx_saan_mem_category ON saan_memories(category);
+      `);
+
+      // 2. Ensure saan_diary exists
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_diary (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          entry TEXT NOT NULL,
+          mood TEXT NOT NULL,
+          activity TEXT,
+          created_at INTEGER NOT NULL
+        );
+      `);
+
+      // 3. Ensure saan_daemon_leases exists for crash resilience (Temporal pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_daemon_leases (
+          lease_name TEXT PRIMARY KEY,
+          lease_owner TEXT NOT NULL,
+          lease_expires_at INTEGER NOT NULL,
+          acquired_at INTEGER NOT NULL
+        );
+      `);
+
+      // 4. Ensure saan_checkpoints exists for state rollbacks (LangGraph pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS saan_checkpoints (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          state_blob TEXT NOT NULL,
+          created_at INTEGER NOT NULL
+        );
+      `);
+
+      // 5. Ensure task_memories exists for associative linking (A-mem pattern)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_memories (
+          task_id INTEGER NOT NULL,
+          memory_id INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (task_id, memory_id),
+          FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+          FOREIGN KEY (memory_id) REFERENCES saan_memories(id) ON DELETE CASCADE
+        );
+      `);
+    },
+  },
 ];
 
 /**

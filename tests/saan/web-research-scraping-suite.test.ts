@@ -300,4 +300,61 @@ describe("Category 4: Web Research, Scraping & Tools Suite (Repos 29-33)", () =>
     assert.equal(treeRes.tier, 1);
     assert.equal(treeRes.data.interactiveCount, 1);
   });
+
+  // 7. Forensic Deep Internals Verification
+  test("SearXNG Deep Internals: normalizeTextField truncates at word boundaries", async () => {
+    const { normalizeTextField } = await import("../../lib/saan/metasearch-aggregator");
+    const sample = "The quick brown fox jumps over the lazy dog";
+    const truncated = normalizeTextField(sample, 20);
+
+    assert.equal(truncated, "The quick brown fox …");
+    assert.ok(!truncated.includes("jumps"));
+  });
+
+  test("Crawl4AI Deep Internals: flattens shadow DOM slots and removes CMP consent overlays", () => {
+    const scraper = new CleanMarkdownScraper();
+    const shadowHtml = `
+      <div id="onetrust-consent-sdk"><p>Accept all cookies</p></div>
+      <div class="CybotCookiebotDialog"><p>Opt in to tracking</p></div>
+      <main>
+        <h1>Main Document</h1>
+        <div id="host">
+          <slot name="content">Fallback text</slot>
+        </div>
+        <p>Genuine text content.</p>
+      </main>
+    `;
+
+    const result = scraper.cleanAndConvert(shadowHtml);
+
+    assert.ok(!result.markdown.includes("Accept all cookies"), "OneTrust CMP banner must be stripped");
+    assert.ok(!result.markdown.includes("Opt in to tracking"), "Cookiebot CMP banner must be stripped");
+    assert.ok(result.markdown.includes("Fallback text"), "Slot fallback should resolve cleanly");
+    assert.ok(result.markdown.includes("Genuine text content."));
+  });
+
+  test("Browser-Use Deep Internals: RectUnionPure disjoint occlusion calculation and element hashing", async () => {
+    const { Rect, RectUnionPure, computeElementHash } = await import("../../lib/saan/accessibility-tree-parser");
+
+    const union = new RectUnionPure();
+    // Modal background covering (0,0) to (100,100)
+    union.add(new Rect(0, 0, 100, 100));
+
+    // Element completely under the modal
+    const coveredElement = new Rect(10, 10, 50, 50);
+    assert.equal(union.isCovered(coveredElement), true, "Element under modal must be covered");
+
+    // Element outside the modal
+    const visibleElement = new Rect(101, 101, 150, 150);
+    assert.equal(union.isCovered(visibleElement), false, "Element outside modal must not be covered");
+
+    // Deterministic 16-hex element hash
+    const hash1 = computeElementHash("button", ["body", "form"], { id: "submit-btn", name: "login" });
+    const hash2 = computeElementHash("button", ["body", "form"], { id: "submit-btn", name: "login" });
+    const hashDiff = computeElementHash("button", ["body", "form"], { id: "cancel-btn", name: "cancel" });
+
+    assert.equal(hash1.length, 16, "Element hash must be 16-hex characters");
+    assert.equal(hash1, hash2, "Identical element structure must generate identical hash");
+    assert.notEqual(hash1, hashDiff, "Different element structure must produce different hash");
+  });
 });

@@ -41,7 +41,40 @@ const DEFAULT_EXCLUDE_TAGS = [
 
 const NOISE_CLASS_ID_REGEX = /(header|footer|nav|navbar|sidebar|modal|popup|overlay|ad|ads|advert|cookie|banner|share|social|breadcrumbs|widget)/i;
 
+/**
+ * Top CMP (Consent Management Platform) selector IDs inspired by crawl4ai remove_consent_popups.js
+ */
+export const CMP_POPUP_PATTERNS = [
+  'onetrust-consent-sdk',
+  'onetrust-banner-sdk',
+  'CybotCookiebotDialog',
+  'didomi-notice',
+  'qc-cmp2-container',
+  'sp_message_container',
+  'fc-consent-root',
+  'truste-consent-track',
+  'cmpbox',
+  'osano-cm-window',
+  'iubenda-cs-banner',
+  'cmplz-cookiebanner',
+  'cky-consent-container',
+  'klaro',
+];
+
 export class CleanMarkdownScraper {
+  /**
+   * Flattens shadow DOM constructs and resolves slots (inspired by crawl4ai flatten_shadow_dom.js).
+   */
+  public flattenShadowDom(html: string): string {
+    if (!html) return '';
+    // Resolve slot replacements and strip scoped shadow styles
+    let flattened = html.replace(/<style[^>]*scoped[^>]*>[\s\S]*?<\/style>/gi, '');
+    flattened = flattened.replace(/<slot\s*(?:name=["']([^"']*)["'])?[^>]*>(?:([\s\S]*?)<\/slot>)?/gi, (_, _name, fallback) => {
+      return fallback || '';
+    });
+    return flattened;
+  }
+
   /**
    * Cleans raw HTML and converts it into structured semantic markdown.
    */
@@ -55,8 +88,17 @@ export class CleanMarkdownScraper {
     const extractedLinks: string[] = [];
     const extractedImages: string[] = [];
 
-    // 1. Remove comments
-    let processed = rawHtml.replace(/<!--[\s\S]*?-->/g, '');
+    // 1. Flatten Shadow DOM
+    let processed = this.flattenShadowDom(rawHtml);
+
+    // 2. Remove comments
+    processed = processed.replace(/<!--[\s\S]*?-->/g, '');
+
+    // 3. Remove CMP consent banners (crawl4ai pattern)
+    for (const cmp of CMP_POPUP_PATTERNS) {
+      const cmpRegex = new RegExp(`<([a-z0-9]+)[^>]*(?:id|class)=["'][^"']*${cmp}[^"']*["'][^>]*>[\\s\\S]*?<\\/\\1>`, 'gi');
+      processed = processed.replace(cmpRegex, '');
+    }
 
     // 2. Remove script and style elements completely
     processed = processed.replace(/<(?:script|style|noscript|template)[\s\S]*?<\/(?:script|style|noscript|template)>/gi, '');

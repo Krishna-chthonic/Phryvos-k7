@@ -47,6 +47,22 @@ const TRACKING_PARAMS = new Set([
   'source',
 ]);
 
+export const MAXIMUM_TITLE_LENGTH_CHARS = 200;
+export const MAXIMUM_CONTENT_LENGTH_CHARS = 1200;
+
+/**
+ * Truncates text at full word boundaries (inspired by SearXNG _normalize_text_field).
+ * e.g. truncateText("hello world", 9) yields "hello …" instead of "hello wor"
+ */
+export function normalizeTextField(text: string, maxLength: number): string {
+  if (!text || typeof text !== 'string') return '';
+  const clean = text.replace(/(\s)+/g, ' ').trim();
+  if (clean.length <= maxLength) return clean;
+  const sliced = clean.slice(0, maxLength);
+  const lastSpace = sliced.lastIndexOf(' ');
+  return (lastSpace > 0 ? sliced.slice(0, lastSpace) : sliced) + ' …';
+}
+
 /**
  * Normalizes URLs for deduplication:
  * - Decodes percent-encodings where appropriate
@@ -247,9 +263,9 @@ export class MetasearchAggregator {
       );
 
       aggregated.push({
-        title: entry.title,
+        title: normalizeTextField(entry.title, MAXIMUM_TITLE_LENGTH_CHARS),
         url: entry.url,
-        content: entry.content,
+        content: normalizeTextField(entry.content, MAXIMUM_CONTENT_LENGTH_CHARS),
         engines: enginesList,
         positions: entry.positions,
         score,

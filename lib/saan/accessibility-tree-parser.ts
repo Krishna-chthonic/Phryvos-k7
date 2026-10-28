@@ -5,6 +5,8 @@
  * indexed accessibility views [0], [1], [2] for agent interaction.
  */
 
+import { createHash } from 'crypto';
+
 export interface InteractiveElement {
   index: number;
   tag: string;
@@ -17,12 +19,87 @@ export interface InteractiveElement {
   href?: string;
   disabled?: boolean;
   checked?: boolean;
+  elementHash?: string;
 }
 
 export interface AccessibilityTreeResult {
   serializedTree: string;
   selectorMap: Record<number, InteractiveElement>;
   interactiveCount: number;
+}
+
+/**
+ * Axis-aligned rectangle for paint-order occlusion detection (browser-use pattern)
+ */
+export class Rect {
+  constructor(
+    public readonly x1: number,
+    public readonly y1: number,
+    public readonly x2: number,
+    public readonly y2: number
+  ) {}
+
+  public area(): number {
+    return Math.max(0, this.x2 - this.x1) * Math.max(0, this.y2 - this.y1);
+  }
+
+  public intersects(other: Rect): boolean {
+    return !(this.x2 <= other.x1 || other.x2 <= this.x1 || this.y2 <= other.y1 || other.y2 <= this.y1);
+  }
+
+  public contains(other: Rect): boolean {
+    return this.x1 <= other.x1 && this.y1 <= other.y1 && this.x2 >= other.x2 && this.y2 >= other.y2;
+  }
+}
+
+/**
+ * Disjoint union of rectangles for occlusion filtering (inspired by browser-use RectUnionPure)
+ */
+export class RectUnionPure {
+  private rects: Rect[] = [];
+
+  public add(rect: Rect): void {
+    let toAdd: Rect[] = [rect];
+    for (const r of this.rects) {
+      const next: Rect[] = [];
+      for (const piece of toAdd) {
+        if (!piece.intersects(r)) {
+          next.push(piece);
+        } else {
+          next.push(...this.splitDiff(piece, r));
+        }
+      }
+      toAdd = next;
+      if (toAdd.length === 0) break;
+    }
+    this.rects.push(...toAdd);
+  }
+
+  public isCovered(target: Rect): boolean {
+    for (const r of this.rects) {
+      if (r.contains(target)) return true;
+    }
+    return false;
+  }
+
+  private splitDiff(a: Rect, b: Rect): Rect[] {
+    const parts: Rect[] = [];
+    if (a.y1 < b.y1) parts.push(new Rect(a.x1, a.y1, a.x2, b.y1));
+    if (b.y2 < a.y2) parts.push(new Rect(a.x1, b.y2, a.x2, a.y2));
+    const yLo = Math.max(a.y1, b.y1);
+    const yHi = Math.min(a.y2, b.y2);
+    if (a.x1 < b.x1) parts.push(new Rect(a.x1, yLo, b.x1, yHi));
+    if (b.x2 < a.x2) parts.push(new Rect(b.x2, yLo, a.x2, yHi));
+    return parts;
+  }
+}
+
+/**
+ * Computes deterministic 16-hex element hash for stable DOM tracking across turns (browser-use pattern)
+ */
+export function computeElementHash(tag: string, branchPath: string[], attrs: Record<string, string>): string {
+  const combined = `${branchPath.join('/')}|${tag}|id=${attrs.id || ''}|name=${attrs.name || ''}|aria=${attrs['aria-label'] || ''}`;
+  return createHash('sha256').update(combined).digest('hex').slice(0, 16);
 }
 
 const DYNAMIC_CLASSES = new Set([
@@ -169,6 +246,7 @@ export class AccessibilityTreeParser {
           href: attrs['href'],
           disabled: attrs['disabled'] !== undefined,
           checked: attrs['checked'] !== undefined,
+          elementHash: computeElementHash(cand.tag, ['body', cand.tag], attrs),
         };
 
         selectorMap[idx] = item;

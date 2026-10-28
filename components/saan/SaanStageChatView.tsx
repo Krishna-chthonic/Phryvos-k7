@@ -30,7 +30,9 @@ import {
   History,
   User,
   AlertTriangle,
+  GitBranch,
 } from "lucide-react";
+import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -127,6 +129,9 @@ export function SaanStageChatView({
   const [isMem0Open, setIsMem0Open] = React.useState(false);
   const [mem0Events, setMem0Events] = React.useState<any[]>([]);
   const [mem0Filter, setMem0Filter] = React.useState<"ALL" | "ADD" | "UPDATE" | "DELETE" | "NONE">("ALL");
+
+  // Graphiti Bi-Temporal Graph State
+  const [isGraphitiOpen, setIsGraphitiOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1131,6 +1136,17 @@ export function SaanStageChatView({
                 <Zap className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Mem0: {mem0Events.length}</span>
               </button>
+
+              {/* Graphiti: Bi-Temporal Knowledge Graph & Contradiction Visualizer Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsGraphitiOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Explore Graphiti Bi-Temporal Knowledge Graph & Contradiction Visualizer"
+              >
+                <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Graphiti</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1840,6 +1856,12 @@ export function SaanStageChatView({
           </div>
         </div>
       )}
+
+      {/* Graphiti Bi-Temporal Knowledge Graph & Contradiction Modal */}
+      <SaanTemporalGraphModal
+        isOpen={isGraphitiOpen}
+        onClose={() => setIsGraphitiOpen(false)}
+      />
     </div>
   );
 }

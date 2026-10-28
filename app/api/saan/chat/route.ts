@@ -57,6 +57,7 @@ import {
 import { globalChatVariables } from "@/lib/saan/chat-variables";
 import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
 import { getMem0AuditLog } from "@/lib/saan/mem0-decision-matrix";
+import { getTemporalEdgeGraphStore } from "@/lib/saan/temporal-edge-graph";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -163,6 +164,23 @@ export async function POST(req: NextRequest) {
     // Mem0 4-State Memory Audit Log
     if (body.type === "get_mem0_events") {
       return NextResponse.json({ ok: true, events: getMem0AuditLog() });
+    }
+
+    // Graphiti Bi-Temporal Knowledge Graph
+    if (body.type === "get_temporal_graph") {
+      const store = getTemporalEdgeGraphStore();
+      const snapshot = store.getSnapshot(body.asOf ? Number(body.asOf) : undefined);
+      return NextResponse.json({ ok: true, graph: snapshot });
+    }
+    if (body.type === "add_temporal_edge" && body.edge) {
+      const store = getTemporalEdgeGraphStore();
+      const res = store.addEdge(body.edge);
+      return NextResponse.json({
+        ok: true,
+        edge: res.edge,
+        supersededEdgeIds: res.supersededEdgeIds,
+        graph: store.getSnapshot(),
+      });
     }
 
     const rawUserMessage = body.message;

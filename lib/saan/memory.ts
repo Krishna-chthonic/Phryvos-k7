@@ -30,6 +30,7 @@ import {
   type CandidateFact,
   type ExistingMemoryItem,
 } from "@/lib/saan/mem0-decision-matrix";
+import { getTemporalEdgeGraphStore, extractTripleFromFact } from "@/lib/saan/temporal-edge-graph";
 
 export interface SaanMemory {
   id: number;
@@ -527,12 +528,36 @@ export function extractMemoriesFromTurn(userMessage: string): MemoryDecision[] {
       case "ADD": {
         saveSaanMemory(decision.factText, (candidate.category as any) || "general", 7, "implicit");
         recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "ADD", "krishna", "saan"));
+        const triple = extractTripleFromFact(decision.factText, "user");
+        if (triple) {
+          getTemporalEdgeGraphStore().addEdge({
+            sourceNode: triple.sourceNode,
+            targetNode: triple.targetNode,
+            relation: triple.relation,
+            fact: decision.factText,
+            validAt: Date.now(),
+            referenceTime: Date.now(),
+            episodes: [`turn_${Date.now()}`],
+          });
+        }
         break;
       }
       case "UPDATE": {
         if (decision.targetId) {
           invalidateAndReplaceMemory(Number(decision.targetId), decision.factText, (candidate.category as any) || "general");
           recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "UPDATE", "krishna", "saan"));
+          const triple = extractTripleFromFact(decision.factText, "user");
+          if (triple) {
+            getTemporalEdgeGraphStore().addEdge({
+              sourceNode: triple.sourceNode,
+              targetNode: triple.targetNode,
+              relation: triple.relation,
+              fact: decision.factText,
+              validAt: Date.now(),
+              referenceTime: Date.now(),
+              episodes: [`turn_${Date.now()}`],
+            });
+          }
         }
         break;
       }

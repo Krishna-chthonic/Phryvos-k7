@@ -99,6 +99,29 @@ import {
   type AccessibilityTreeResult,
   type InteractiveElement,
 } from "./accessibility-tree-parser";
+import {
+  StealthHeaderGenerator,
+  type DevicePreset,
+  DEVICE_PROFILES,
+} from "./stealth-fetch-headers";
+import {
+  McpJsonRpcBridge,
+  type McpTool,
+  type McpResource,
+  type McpPrompt,
+} from "./mcp-jsonrpc-bridge";
+import {
+  PipecatFramePipeline,
+  AudioRawFrame,
+  TextFrame,
+  CancelFrame,
+  type Frame,
+} from "./pipecat-frame-pipeline";
+import {
+  VoiceTurnTakingFSM,
+  UtteranceNormalizer,
+  type VoiceTurnEvent,
+} from "./voice-turntaking-fsm";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
@@ -115,6 +138,24 @@ export const globalMetasearchAggregator = new MetasearchAggregator();
 export const globalMarkdownScraper = new CleanMarkdownScraper();
 export const globalWebSecurityFence = new WebSecurityFence();
 export const globalAccessibilityParser = new AccessibilityTreeParser();
+export const globalStealthGenerator = new StealthHeaderGenerator();
+export const globalMcpBridge = new McpJsonRpcBridge();
+export const globalAudioPipeline = new PipecatFramePipeline();
+export const globalVoiceFSM = new VoiceTurnTakingFSM();
+
+// Register base system status resource and echo tool on global MCP bridge
+globalMcpBridge.registerResource(
+  { uri: 'saan://status', name: 'Saan Status', mimeType: 'application/json' },
+  () => JSON.stringify({ state: 'active', node: 'phryvos-k7', companion: 'saan' })
+);
+globalMcpBridge.registerTool(
+  {
+    name: 'echo',
+    description: 'Echoes back test payload',
+    inputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+  },
+  args => ({ echoed: args.message })
+);
 
 export interface SaanActionResult {
   success: boolean;
@@ -236,6 +277,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "clean_web_markdown":
     case "fence_web_content":
     case "parse_accessibility_tree":
+    case "generate_stealth_headers":
+    case "dispatch_mcp_call":
+    case "process_audio_frame":
+    case "handle_voice_turn_event":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1908,6 +1953,111 @@ export function parseAccessibilityTreeAction(html: string): SaanActionResult {
 }
 
 /**
+ * Playwright Anti-Bot Stealth Headers
+ */
+export function generateStealthHeadersAction(
+  preset?: DevicePreset,
+  overrides?: Record<string, string>
+): SaanActionResult {
+  try {
+    const headers = globalStealthGenerator.generateHeaders(preset, overrides);
+    const profile = globalStealthGenerator.getProfile(preset);
+    return {
+      success: true,
+      action: "generate_stealth_headers",
+      tier: 1,
+      message: `Generated stealth anti-bot headers for profile "${profile.name}"`,
+      data: { profile, headers },
+    };
+  } catch (err: any) {
+    return { success: false, action: "generate_stealth_headers", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Model Context Protocol (MCP 2.x) Dispatcher
+ */
+export async function dispatchMcpCallAction(message: any): Promise<SaanActionResult> {
+  try {
+    const response = await globalMcpBridge.handleMessage(message);
+    return {
+      success: true,
+      action: "dispatch_mcp_call",
+      tier: 1,
+      message: response ? `Handled MCP method: "${message.method}"` : `Processed MCP notification`,
+      data: response,
+    };
+  } catch (err: any) {
+    return { success: false, action: "dispatch_mcp_call", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Pipecat Low-Latency Audio Streaming Pipeline
+ */
+export function processAudioFrameAction(
+  audioBytesBase64?: string,
+  sampleRate = 16000,
+  channels = 1,
+  interrupt = false
+): SaanActionResult {
+  try {
+    if (interrupt) {
+      const cancelFrame = new CancelFrame('user_barge_in');
+      globalAudioPipeline.push(cancelFrame);
+      return {
+        success: true,
+        action: "process_audio_frame",
+        tier: 1,
+        message: "Triggered barge-in interruption; drained pending queue",
+        data: { queueSize: globalAudioPipeline.size(), interrupted: true },
+      };
+    }
+
+    const buffer = audioBytesBase64 ? Buffer.from(audioBytesBase64, 'base64') : new Uint8Array(320);
+    const frame = new AudioRawFrame(buffer, sampleRate, channels);
+    globalAudioPipeline.push(frame);
+
+    return {
+      success: true,
+      action: "process_audio_frame",
+      tier: 1,
+      message: `Enqueued AudioRawFrame #${frame.id} with PTS ${frame.pts}`,
+      data: { frameId: frame.id, pts: frame.pts.toString(), queueSize: globalAudioPipeline.size() },
+    };
+  } catch (err: any) {
+    return { success: false, action: "process_audio_frame", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * LiveKit Turn-Taking FSM & OVOS Utterance Normalizer
+ */
+export function handleVoiceTurnEventAction(
+  event: VoiceTurnEvent,
+  spokenInput?: string
+): SaanActionResult {
+  try {
+    const transition = globalVoiceFSM.handleEvent(event);
+    let normalized: string | undefined = undefined;
+
+    if (spokenInput) {
+      normalized = globalVoiceFSM.normalizeSpokenInput(spokenInput);
+    }
+
+    return {
+      success: true,
+      action: "handle_voice_turn_event",
+      tier: 1,
+      message: `FSM transition: ${transition.previousState} -> ${transition.currentState} via ${event}${transition.bargeInDetected ? ' (BARGE-IN DETECTED)' : ''}`,
+      data: { transition, normalizedText: normalized },
+    };
+  } catch (err: any) {
+    return { success: false, action: "handle_voice_turn_event", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -2050,6 +2200,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return fenceWebContentAction(params.rawText, params.url, params.title);
     case "parse_accessibility_tree":
       return parseAccessibilityTreeAction(params.html);
+    case "generate_stealth_headers":
+      return generateStealthHeadersAction(params.preset, params.overrides);
+    case "dispatch_mcp_call":
+      return dispatchMcpCallAction(params.message);
+    case "process_audio_frame":
+      return processAudioFrameAction(params.audioBytesBase64, params.sampleRate, params.channels, params.interrupt);
+    case "handle_voice_turn_event":
+      return handleVoiceTurnEventAction(params.event, params.spokenInput);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -2059,12 +2217,16 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree" | "generate_stealth_headers" | "dispatch_mcp_call" | "process_audio_frame" | "handle_voice_turn_event",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- generate_stealth_headers: { "preset": "desktop-chrome-linux" | "mobile-pixel-android" }
+- dispatch_mcp_call: { "message": { "jsonrpc": "2.0", "id": 1, "method": "tools/list" } }
+- process_audio_frame: { "sampleRate": 16000, "channels": 1, "interrupt": false }
+- handle_voice_turn_event: { "event": "user_speech_start" | "user_speech_end", "spokenInput": "um like hello" }
 - aggregate_metasearch: { "rawResults": [{ "title": "Example", "url": "https://example.com", "content": "Text", "engine": "searxng", "position": 1 }] }
 - clean_web_markdown: { "rawHtml": "<html><body><header>Nav</header><main><p>Content</p></main></body></html>" }
 - fence_web_content: { "rawText": "Scraped body", "url": "https://example.com", "title": "Example" }

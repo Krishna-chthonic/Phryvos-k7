@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
+import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
+import { StreamSentenceDivider } from "@/lib/saan/sentence-divider";
 import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
 import { SaanDialogueBubble, type DialogueBubbleMessage } from "./SaanDialogueBubble";
 import { SaanAffectionBar } from "./SaanAffectionBar";
@@ -178,9 +180,45 @@ export function SaanStageChatView({
     return () => cancelAnimationFrame(animId);
   }, [isSpeaking, isListening, loading]);
 
-  // Airi Natural Speech AST Normalizer + Timed <|DELAY n|> Pauses
+  // Open-LLM-VTuber Auditory Reality Interruption Tracking
+  const activeSpeakingMsgIdRef = React.useRef<string | null>(null);
+  const activeSpeakingTextRef = React.useRef<string>("");
+  const speechStartTimeRef = React.useRef<number>(0);
+
+  // Barge-In Cancellation with Auditory Memory Contract (truncateHeardMemory)
+  const cancelSpeechAndApplyBargeIn = React.useCallback(
+    (reason: "user_typing" | "user_speaking" = "user_typing") => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        if (window.speechSynthesis.speaking) {
+          window.speechSynthesis.cancel();
+        }
+      }
+
+      // If speech was actively playing, truncate memory to auditory reality
+      if (activeSpeakingMsgIdRef.current && activeSpeakingTextRef.current) {
+        const elapsedSec = Math.max(0.5, (Date.now() - speechStartTimeRef.current) / 1000);
+        const result = truncateHeardMemory(activeSpeakingTextRef.current, elapsedSec, 150);
+
+        if (result.wasTruncated) {
+          const targetId = activeSpeakingMsgIdRef.current;
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === targetId ? { ...m, text: result.savedContent } : m
+            )
+          );
+        }
+      }
+
+      activeSpeakingMsgIdRef.current = null;
+      activeSpeakingTextRef.current = "";
+      setIsSpeaking(false);
+    },
+    []
+  );
+
+  // Airi & Open-LLM-VTuber Low-Latency Speech Pipeline (StreamSentenceDivider + Delays)
   const speakText = React.useCallback(
-    async (rawText: string) => {
+    async (rawText: string, messageId?: string) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
 
@@ -194,42 +232,60 @@ export function SaanStageChatView({
       // 2. Pre-process through Airi speech transformer (LaTeX math -> spoken words, \ce -> words)
       const speechTransformed = toNaturalSpeechText(cleanReasoning);
 
-      // 3. Parse streaming cadence controls: split on <|DELAY n|>
-      // e.g. "Wait a sec <|DELAY 1.5|> now I get it!" -> ["Wait a sec", 1.5, "now I get it!"]
-      const parts = speechTransformed.split(/<\|DELAY\s*([\d.]+)?\|>/g);
-
+      // Track active speech for barge-in auditory memory
+      activeSpeakingMsgIdRef.current = messageId || null;
+      activeSpeakingTextRef.current = rawText;
+      speechStartTimeRef.current = Date.now();
       setIsSpeaking(true);
 
-      for (let i = 0; i < parts.length; i++) {
-        const seg = parts[i]?.trim();
-        if (!seg) continue;
+      // 3. Fast first comma response divider (<280ms TTFA)
+      const divider = new StreamSentenceDivider({ fasterFirstResponse: true });
+      const sentenceChunks = [...divider.feed(speechTransformed), ...divider.flush()];
 
-        // Check if this segment was a delay seconds number
-        const delaySeconds = parseFloat(seg);
-        if (!isNaN(delaySeconds) && delaySeconds > 0 && delaySeconds <= 10) {
-          // Authentic human conversational silence pause
-          await new Promise((r) => setTimeout(r, delaySeconds * 1000));
-          continue;
+      for (const chunk of sentenceChunks) {
+        // If barge-in cancelled mid-stream, break immediately
+        if (typeof window !== "undefined" && "speechSynthesis" in window) {
+          if (!window.speechSynthesis.speaking && speechStartTimeRef.current === 0) {
+            break;
+          }
         }
 
-        // Clean out any leftover markdown or raw tags
-        const speakableChunk = seg.replace(/[*_#`~>]/g, "").trim();
-        if (!speakableChunk) continue;
+        // Parse streaming cadence controls: split on <|DELAY n|>
+        const parts = chunk.split(/<\|DELAY\s*([\d.]+)?\|>/g);
 
-        await new Promise<void>((resolve) => {
-          const utter = new SpeechSynthesisUtterance(speakableChunk);
-          utter.rate = 1.05;
-          utter.pitch = 1.02;
-          utter.lang = "hi-IN";
+        for (let i = 0; i < parts.length; i++) {
+          const seg = parts[i]?.trim();
+          if (!seg) continue;
 
-          utter.onend = () => resolve();
-          utter.onerror = () => resolve();
+          // Check if this segment was a delay seconds number
+          const delaySeconds = parseFloat(seg);
+          if (!isNaN(delaySeconds) && delaySeconds > 0 && delaySeconds <= 10) {
+            // Authentic human conversational silence pause
+            await new Promise((r) => setTimeout(r, delaySeconds * 1000));
+            continue;
+          }
 
-          window.speechSynthesis.speak(utter);
-        });
+          // Clean out any leftover markdown or raw tags
+          const speakableChunk = seg.replace(/[*_#`~>]/g, "").trim();
+          if (!speakableChunk) continue;
+
+          await new Promise<void>((resolve) => {
+            const utter = new SpeechSynthesisUtterance(speakableChunk);
+            utter.rate = 1.05;
+            utter.pitch = 1.02;
+            utter.lang = "hi-IN";
+
+            utter.onend = () => resolve();
+            utter.onerror = () => resolve();
+
+            window.speechSynthesis.speak(utter);
+          });
+        }
       }
 
       setIsSpeaking(false);
+      activeSpeakingMsgIdRef.current = null;
+      activeSpeakingTextRef.current = "";
     },
     []
   );
@@ -237,11 +293,8 @@ export function SaanStageChatView({
   // Instant Barge-In: typing or clicking cancels any active speech immediately
   const handleInputChange = (val: string) => {
     setInput(val);
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-      }
+    if (isSpeaking) {
+      cancelSpeechAndApplyBargeIn("user_typing");
     }
   };
 
@@ -251,9 +304,8 @@ export function SaanStageChatView({
     if (!query || loading) return;
 
     // Barge-in cancel speech on send
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+    if (isSpeaking) {
+      cancelSpeechAndApplyBargeIn("user_speaking");
     }
 
     const userMsg: DialogueBubbleMessage = {
@@ -322,7 +374,7 @@ export function SaanStageChatView({
         setMessages((prev) => [...prev, newMsg]);
 
         if (voiceEnabled) {
-          speakText(cleanReply);
+          speakText(cleanReply, newMsg.id);
         }
 
         onRefreshSoul?.();
@@ -504,6 +556,13 @@ export function SaanStageChatView({
               bondStage={profile?.bondStage || "Soulbound"}
               bondScore={profile?.bondScore || 65}
               onPoke={() => setAvatarEmotion("blush")}
+              onHeadpat={() => {
+                setAvatarEmotion("blush");
+                handleAffectionAction("headpat");
+              }}
+              onCheekPoke={() => {
+                setAvatarEmotion("curious");
+              }}
             />
 
             {/* Quick Interactive Affection Bar (HerAndHim) */}
@@ -709,7 +768,7 @@ export function SaanStageChatView({
           <SaanDialogueBubble
             key={m.id}
             message={m}
-            onSpeak={(text) => speakText(text)}
+            onSpeak={(text) => speakText(text, m.id)}
             onReact={handleUserReaction}
             onRollback={handleRollback}
           />

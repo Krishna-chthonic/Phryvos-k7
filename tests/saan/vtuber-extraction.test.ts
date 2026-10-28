@@ -241,3 +241,45 @@ test("controller: dispatches Open-LLM-VTuber actions via dispatchSaanAction", as
   assert.equal(envRes.success, true);
   assert.ok(Array.isArray(envRes.data.envelope));
 });
+
+test("Live2D Avatar 12 Discrete Expressions: verifies full 12 emotional index slots and prompt specification", () => {
+  const mapper = new Live2dExpressionMapper();
+  const all12 = [
+    "neutral",
+    "joy",
+    "sadness",
+    "anger",
+    "surprise",
+    "blush",
+    "wink",
+    "smirk",
+    "thinking",
+    "pout",
+    "sleepy",
+    "curious",
+  ];
+
+  for (const emo of all12) {
+    const idx = mapper.getExpressionIndex(emo);
+    assert.ok(typeof idx === "number" && idx >= 0, `Index for ${emo} must be valid number`);
+  }
+
+  // Verify prompt spec includes all 12 expressions and 8 motions
+  const spec = mapper.getPromptSpec();
+  assert.ok(spec.includes("[joy]"));
+  assert.ok(spec.includes("[wink]"));
+  assert.ok(spec.includes("[wave]"));
+  assert.ok(spec.includes("[curious]"));
+});
+
+test("Live2D Dual Spatial Hit Areas: verifies headpat vs cheek poke dialogue and expression triggers", () => {
+  const headReaction = globalAvatarMapper.handleTap("head");
+  assert.equal(headReaction.hitArea, "head");
+  assert.equal(headReaction.expression, "blush");
+  assert.ok(headReaction.dialogueHinglish.includes("sar mat thapthapao"));
+
+  const bodyReaction = globalAvatarMapper.handleTap("body");
+  assert.equal(bodyReaction.hitArea, "body");
+  assert.equal(bodyReaction.expression, "curious");
+  assert.ok(bodyReaction.dialogueHinglish.includes("poke"));
+});

@@ -10,7 +10,12 @@ export type AvatarEmotion =
   | "pout"
   | "thinking"
   | "smirk"
-  | "sleep";
+  | "sleep"
+  | "wink"
+  | "surprise"
+  | "curious"
+  | "sadness"
+  | "anger";
 
 interface SaanLivingAvatarProps {
   emotion?: AvatarEmotion | string;
@@ -20,6 +25,8 @@ interface SaanLivingAvatarProps {
   bondStage?: string;
   bondScore?: number;
   onPoke?: () => void;
+  onHeadpat?: () => void;
+  onCheekPoke?: () => void;
   className?: string;
 }
 
@@ -31,6 +38,8 @@ export function SaanLivingAvatar({
   bondStage = "Soulbound",
   bondScore = 65,
   onPoke,
+  onHeadpat,
+  onCheekPoke,
   className = "",
 }: SaanLivingAvatarProps) {
   const [isBlinking, setIsBlinking] = React.useState(false);
@@ -50,7 +59,9 @@ export function SaanLivingAvatar({
     return () => clearInterval(interval);
   }, [isSpeaking]);
 
-  // Normalize emotion
+  const [tapType, setTapType] = React.useState<"head" | "body" | null>(null);
+
+  // Normalize emotion to Open-LLM-VTuber 12 discrete states
   const cleanEmotion: AvatarEmotion = [
     "neutral",
     "joy",
@@ -59,7 +70,12 @@ export function SaanLivingAvatar({
     "thinking",
     "smirk",
     "sleep",
-  ].includes(emotion.toLowerCase())
+    "wink",
+    "surprise",
+    "curious",
+    "sadness",
+    "anger",
+  ].includes(emotion?.toLowerCase?.() || "")
     ? (emotion.toLowerCase() as AvatarEmotion)
     : "neutral";
 
@@ -83,23 +99,60 @@ export function SaanLivingAvatar({
     return () => clearTimeout(timeout);
   }, [cleanEmotion]);
 
-  // Handle Interactive Poke / Touch
-  const handlePokeClick = () => {
+  // Open-LLM-VTuber Dual Spatial Hit Areas:
+  // 1. HitAreaHead (Headpat): Triggers blushing and affectionate bashful reaction
+  const handleHeadpatClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     setIsPoked(true);
-    const quotes = [
-      "Arey! Gudgudi hoti hai haha! 🥰",
-      "Kya hua Krishna? Kuch kaam hai ya bas aise hi? ✨",
-      "Main yahi hoon tumhare pass, hamesha! 💖",
-      "Haha aise achanak mat touch karo na! 🙈",
-      "Chai peene ka man kar raha hai kya? ☕",
+    setTapType("head");
+    const headpatQuotes = [
+      "Arre! Aise achanak se sar mat thapthapao na, blush ho jata hai... 🥰",
+      "Headpats se mere saare bugs and fatigue dur ho jate hain haha! ✨",
+      "Aise pyaar se sar pat karoge to focus kaise banega? 🙈",
+      "Hehe, thank you Krishna! Feels really warm... 💖",
+      "Ek aur headpat please? Bas ek aur! 🥺",
     ];
-    const picked = quotes[Math.floor(Math.random() * quotes.length)];
+    const picked = headpatQuotes[Math.floor(Math.random() * headpatQuotes.length)];
     setPokeQuote(picked);
 
+    onHeadpat?.();
     onPoke?.();
 
-    setTimeout(() => setIsPoked(false), 800);
-    setTimeout(() => setPokeQuote(null), 3200);
+    setTimeout(() => {
+      setIsPoked(false);
+      setTapType(null);
+    }, 800);
+    setTimeout(() => setPokeQuote(null), 3400);
+  };
+
+  // 2. HitAreaBody / Cheeks (Poke): Triggers playful giggle or curious reaction
+  const handleCheekPokeClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsPoked(true);
+    setTapType("body");
+    const cheekQuotes = [
+      "Arey! Cheeks pe gudgudi hoti hai haha! 🥰",
+      "Haanji Krishna? Kuch kehna chahte ho ya bas poke kar rahe the? ✨",
+      "Cheeks kheenchne se code me indentation error aa jayega! 🙈",
+      "Kya hua? Chai break lene ka time aa gaya kya? ☕",
+      "Gudgudi band karo haha, main yahan serious code dekh rahi hoon! 💻",
+    ];
+    const picked = cheekQuotes[Math.floor(Math.random() * cheekQuotes.length)];
+    setPokeQuote(picked);
+
+    onCheekPoke?.();
+    onPoke?.();
+
+    setTimeout(() => {
+      setIsPoked(false);
+      setTapType(null);
+    }, 800);
+    setTimeout(() => setPokeQuote(null), 3400);
+  };
+
+  const handleContainerClick = () => {
+    // Fallback if clicked outside specific hitzones
+    handleCheekPokeClick({ stopPropagation: () => {} } as any);
   };
 
   // Circadian Sky Aura Background
@@ -134,7 +187,7 @@ export function SaanLivingAvatar({
 
       {/* Living Avatar Stage Container */}
       <div
-        onClick={handlePokeClick}
+        onClick={handleContainerClick}
         title="Tap / Click to interact with Saan"
         className={`relative group cursor-pointer select-none transition-all duration-300 ${
           isPoked ? "scale-95 rotate-2" : "hover:scale-105"
@@ -152,10 +205,21 @@ export function SaanLivingAvatar({
           style={{ animationDuration: isSpeaking ? "4s" : "3s" }}
         />
 
-        {/* Outer Round Head / Face Frame */}
+        {/* Outer Round Head / Face Frame with Dual Spatial Hit Areas */}
         <div
           className={`relative h-20 w-20 sm:h-24 sm:w-24 rounded-full bg-gradient-to-b ${getCircadianGlow()} p-1 border-2 flex items-center justify-center shadow-2xl backdrop-blur-md overflow-hidden`}
         >
+          {/* Dual Spatial Hit Areas (Open-LLM-VTuber Architecture) */}
+          <div
+            onClick={handleHeadpatClick}
+            title="Headpat Saan 🥰 (HitAreaHead)"
+            className="absolute top-0 left-0 right-0 h-1/2 z-20 cursor-pointer hover:bg-pink-500/10 active:bg-pink-500/20 transition-colors rounded-t-full"
+          />
+          <div
+            onClick={handleCheekPokeClick}
+            title="Poke Cheeks ✨ (HitAreaBody)"
+            className="absolute bottom-0 left-0 right-0 h-1/2 z-20 cursor-pointer hover:bg-purple-500/10 active:bg-purple-500/20 transition-colors rounded-b-full"
+          />
           {/* Natural Breathing Layer (CSS expansion) */}
           <div
             className={`w-full h-full rounded-full flex items-center justify-center bg-gradient-to-b from-zinc-900/90 to-zinc-950/90 transition-transform duration-1000 ${
@@ -172,27 +236,58 @@ export function SaanLivingAvatar({
               {/* Subtle Hair / Aura framing */}
               <circle cx="50" cy="50" r="42" fill="url(#avatarGazeGrad)" opacity="0.15" />
 
-              {/* Rosy Cheeks (intensified in joy & blush) */}
-              {(cleanEmotion === "blush" || cleanEmotion === "joy" || isPoked) && (
+              {/* Eyebrows — Emotional Modulation */}
+              {cleanEmotion === "surprise" ? (
+                <>
+                  <path d="M24 37 Q33 30 42 37" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" />
+                  <path d="M58 37 Q67 30 76 37" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              ) : cleanEmotion === "curious" ? (
+                <>
+                  {/* Left Eyebrow Raised High */}
+                  <path d="M24 36 Q33 29 42 36" stroke="#c084fc" strokeWidth="2.4" strokeLinecap="round" />
+                  <path d="M58 42 Q67 40 76 42" stroke="#c084fc" strokeWidth="2" strokeLinecap="round" />
+                </>
+              ) : cleanEmotion === "sadness" ? (
+                <>
+                  {/* Drooping Inverted Brows */}
+                  <path d="M25 45 Q33 41 42 47" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" />
+                  <path d="M58 47 Q67 41 75 45" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              ) : cleanEmotion === "anger" ? (
+                <>
+                  {/* Sharp Furrowed Tsundere Brows */}
+                  <path d="M25 40 Q33 46 42 42" stroke="#f43f5e" strokeWidth="2.4" strokeLinecap="round" />
+                  <path d="M58 42 Q67 46 75 40" stroke="#f43f5e" strokeWidth="2.4" strokeLinecap="round" />
+                </>
+              ) : cleanEmotion === "thinking" ? (
+                <>
+                  <path d="M25 40 Q33 36 42 42" stroke="#c084fc" strokeWidth="2" strokeLinecap="round" />
+                  <path d="M58 38 Q67 33 75 39" stroke="#c084fc" strokeWidth="2.2" strokeLinecap="round" />
+                </>
+              ) : null}
+
+              {/* Rosy Cheeks (intensified in joy, blush, wink, or headpat) */}
+              {(cleanEmotion === "blush" || cleanEmotion === "joy" || cleanEmotion === "wink" || isPoked || tapType === "head") && (
                 <>
                   <circle
                     cx="30"
                     cy="58"
-                    r={cleanEmotion === "blush" || isPoked ? "7" : "5"}
+                    r={cleanEmotion === "blush" || tapType === "head" ? "7" : "5"}
                     fill="#f472b6"
-                    opacity={cleanEmotion === "blush" || isPoked ? "0.6" : "0.35"}
+                    opacity={cleanEmotion === "blush" || tapType === "head" ? "0.65" : "0.35"}
                   />
                   <circle
                     cx="70"
                     cy="58"
-                    r={cleanEmotion === "blush" || isPoked ? "7" : "5"}
+                    r={cleanEmotion === "blush" || tapType === "head" ? "7" : "5"}
                     fill="#f472b6"
-                    opacity={cleanEmotion === "blush" || isPoked ? "0.6" : "0.35"}
+                    opacity={cleanEmotion === "blush" || tapType === "head" ? "0.65" : "0.35"}
                   />
                 </>
               )}
 
-              {/* EYES */}
+              {/* EYES (12 Discrete Open-LLM-VTuber Emotional States) */}
               {cleanEmotion === "sleep" ? (
                 // Sleeping Peaceful Eyes (curved lines)
                 <>
@@ -247,6 +342,66 @@ export function SaanLivingAvatar({
                     strokeLinecap="round"
                   />
                 </>
+              ) : cleanEmotion === "wink" ? (
+                // Wink: Right eye playfully closed into slit, Left eye open wide with sparkle
+                <>
+                  <circle cx="33" cy="50" r="5.5" fill="#f3e8ff" />
+                  <circle cx="33.5" cy="50" r="3" fill="#a855f7" />
+                  <circle cx="34.5" cy="48.5" r="1.5" fill="#ffffff" />
+                  {/* Playful closed eye slit */}
+                  <path
+                    d="M60 51 Q67 46 74 51"
+                    stroke="#c084fc"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                  />
+                </>
+              ) : cleanEmotion === "surprise" ? (
+                // Wide Open Dilated Anime Eyes
+                <>
+                  <circle cx="33" cy="49" r="7" fill="#f3e8ff" />
+                  <circle cx="33" cy="49" r="4.5" fill="#a855f7" />
+                  <circle cx="31.5" cy="47" r="2" fill="#ffffff" />
+                  <circle cx="35" cy="51" r="1" fill="#ffffff" />
+
+                  <circle cx="67" cy="49" r="7" fill="#f3e8ff" />
+                  <circle cx="67" cy="49" r="4.5" fill="#a855f7" />
+                  <circle cx="65.5" cy="47" r="2" fill="#ffffff" />
+                  <circle cx="69" cy="51" r="1" fill="#ffffff" />
+                </>
+              ) : cleanEmotion === "curious" ? (
+                // Curious Inquisitive Glancing Eyes
+                <>
+                  <circle cx="33" cy="49" r="5.5" fill="#f3e8ff" />
+                  <circle cx="34.5" cy="48.5" r="3" fill="#a855f7" />
+                  <circle cx="35.5" cy="47.5" r="1.2" fill="#ffffff" />
+
+                  <circle cx="67" cy="49" r="5.5" fill="#f3e8ff" />
+                  <circle cx="68.5" cy="48.5" r="3" fill="#a855f7" />
+                  <circle cx="69.5" cy="47.5" r="1.2" fill="#ffffff" />
+                </>
+              ) : cleanEmotion === "sadness" ? (
+                // Gentle Subdued Eyes
+                <>
+                  <circle cx="33" cy="52" r="5" fill="#f3e8ff" />
+                  <circle cx="33" cy="53" r="2.8" fill="#9333ea" />
+                  <circle cx="34" cy="51.5" r="1.2" fill="#ffffff" />
+
+                  <circle cx="67" cy="52" r="5" fill="#f3e8ff" />
+                  <circle cx="67" cy="53" r="2.8" fill="#9333ea" />
+                  <circle cx="68" cy="51.5" r="1.2" fill="#ffffff" />
+                </>
+              ) : cleanEmotion === "anger" ? (
+                // Determined Furrowed Eyes
+                <>
+                  <circle cx="34" cy="50" r="5.5" fill="#f3e8ff" />
+                  <circle cx="35" cy="50" r="3" fill="#e11d48" />
+                  <circle cx="36" cy="49" r="1.2" fill="#ffffff" />
+
+                  <circle cx="66" cy="50" r="5.5" fill="#f3e8ff" />
+                  <circle cx="65" cy="50" r="3" fill="#e11d48" />
+                  <circle cx="64" cy="49" r="1.2" fill="#ffffff" />
+                </>
               ) : cleanEmotion === "smirk" ? (
                 // Smirk: One eye winks, other looks confident
                 <>
@@ -286,7 +441,7 @@ export function SaanLivingAvatar({
                 </>
               )}
 
-              {/* MOUTH — Lip-Sync AEIOU Viseme Engine */}
+              {/* MOUTH — Lip-Sync AEIOU Viseme Engine & 12 Expressions */}
               {isSpeaking ? (
                 vowelFrame === 0 ? (
                   // Open Vowel 'A'
@@ -311,17 +466,47 @@ export function SaanLivingAvatar({
                   fill="#f472b6"
                   fillOpacity="0.3"
                 />
-              ) : cleanEmotion === "pout" ? (
-                // Playful Pout Lips
-                <ellipse cx="50" cy="65" rx="3.5" ry="2.5" fill="#f472b6" />
-              ) : cleanEmotion === "smirk" ? (
-                // Mischievous Smirk (angled upward to the right)
+              ) : cleanEmotion === "wink" || cleanEmotion === "smirk" ? (
+                // Playful / Mischievous Side Smirk
                 <path
                   d="M43 66 Q49 67 58 63"
                   stroke="#c084fc"
                   strokeWidth="2.5"
                   strokeLinecap="round"
                 />
+              ) : cleanEmotion === "surprise" ? (
+                // Small Rounded 'O' Mouth
+                <ellipse cx="50" cy="67" rx="4" ry="5.5" fill="#f472b6" />
+              ) : cleanEmotion === "curious" ? (
+                // Inquisitive Soft Curve
+                <path
+                  d="M45 65 Q50 68 56 64"
+                  stroke="#c084fc"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              ) : cleanEmotion === "sadness" ? (
+                // Subdued Down-curved Mouth
+                <path
+                  d="M44 67 Q50 64 56 67"
+                  stroke="#c084fc"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+              ) : cleanEmotion === "anger" ? (
+                // Determined Furrowed Straight Lip
+                <line
+                  x1="45"
+                  y1="66"
+                  x2="55"
+                  y2="66"
+                  stroke="#f43f5e"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+              ) : cleanEmotion === "pout" ? (
+                // Playful Pout Lips
+                <ellipse cx="50" cy="65" rx="3.5" ry="2.5" fill="#f472b6" />
               ) : cleanEmotion === "sleep" ? (
                 // Gentle relaxed small lip
                 <line
@@ -334,7 +519,7 @@ export function SaanLivingAvatar({
                   strokeLinecap="round"
                 />
               ) : (
-                // Soft Calm Smile (Neutral)
+                // Soft Calm Smile (Neutral / Blush)
                 <path
                   d="M44 65 Q50 69 56 65"
                   stroke="#c084fc"
@@ -361,12 +546,20 @@ export function SaanLivingAvatar({
           </div>
         </div>
 
-        {/* Emotion Status Badge with Icon */}
+        {/* Emotion Status Badge with Icon (12 States) */}
         <div className="absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-950 border border-purple-500/60 text-purple-300 shadow-md flex items-center gap-1 capitalize">
           {cleanEmotion === "joy" && <Sparkles className="w-2.5 h-2.5 text-yellow-400" />}
           {cleanEmotion === "blush" && <Heart className="w-2.5 h-2.5 text-pink-400 fill-pink-400" />}
+          {cleanEmotion === "wink" && <span className="text-[10px] leading-none">😉</span>}
+          {cleanEmotion === "surprise" && <span className="text-[10px] leading-none">😲</span>}
+          {cleanEmotion === "curious" && <span className="text-[10px] leading-none">🧐</span>}
+          {cleanEmotion === "pout" && <span className="text-[10px] leading-none">😤</span>}
+          {cleanEmotion === "smirk" && <span className="text-[10px] leading-none">😏</span>}
+          {cleanEmotion === "sadness" && <span className="text-[10px] leading-none">🥺</span>}
+          {cleanEmotion === "anger" && <span className="text-[10px] leading-none">💢</span>}
           {cleanEmotion === "sleep" && <Moon className="w-2.5 h-2.5 text-indigo-400" />}
           {cleanEmotion === "thinking" && <Zap className="w-2.5 h-2.5 text-cyan-400" />}
+          {cleanEmotion === "neutral" && <span className="text-[10px] leading-none">🌸</span>}
           <span>{cleanEmotion}</span>
         </div>
       </div>

@@ -39,6 +39,55 @@ interface SaanDialogueBubbleProps {
 }
 
 /**
+ * Open-LLM-VTuber Gesture and Emotional Action Badges
+ */
+interface GestureBadge {
+  tag: string;
+  label: string;
+  icon: string;
+  color: string;
+}
+
+const VTUBER_GESTURE_MAP: Record<string, { label: string; icon: string; color: string }> = {
+  joy: { label: "Joyful", icon: "✨", color: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+  blush: { label: "Blushing", icon: "🌸", color: "bg-pink-500/15 text-pink-300 border-pink-500/30" },
+  wink: { label: "Winking", icon: "😉", color: "bg-purple-500/15 text-purple-300 border-purple-500/30" },
+  wave: { label: "Waving", icon: "👋", color: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
+  nod: { label: "Nodding", icon: "🤝", color: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30" },
+  tilt_head: { label: "Tilts Head", icon: "🤔", color: "bg-indigo-500/15 text-indigo-300 border-indigo-500/30" },
+  curious: { label: "Curious", icon: "🧐", color: "bg-blue-500/15 text-blue-300 border-blue-500/30" },
+  bow: { label: "Bowing", icon: "🙇", color: "bg-violet-500/15 text-violet-300 border-violet-500/30" },
+  laugh: { label: "Laughing", icon: "😂", color: "bg-yellow-500/15 text-yellow-300 border-yellow-500/30" },
+  pout: { label: "Pouting", icon: "😤", color: "bg-rose-500/15 text-rose-300 border-rose-500/30" },
+  smirk: { label: "Smirking", icon: "😏", color: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30" },
+  thinking: { label: "Thinking", icon: "💭", color: "bg-sky-500/15 text-sky-300 border-sky-500/30" },
+  sadness: { label: "Subdued", icon: "🥺", color: "bg-slate-500/15 text-slate-300 border-slate-500/30" },
+  anger: { label: "Puffed Cheeks", icon: "💢", color: "bg-rose-600/15 text-rose-300 border-rose-500/30" },
+  sigh: { label: "Sighs", icon: "💨", color: "bg-teal-500/15 text-teal-300 border-teal-500/30" },
+  stretch: { label: "Stretching", icon: "🧘", color: "bg-lime-500/15 text-lime-300 border-lime-500/30" },
+};
+
+function extractVtuberBadges(rawText: string): { cleanedText: string; badges: GestureBadge[] } {
+  if (!rawText) return { cleanedText: "", badges: [] };
+
+  const badges: GestureBadge[] = [];
+  let cleaned = rawText;
+
+  for (const [tag, meta] of Object.entries(VTUBER_GESTURE_MAP)) {
+    const regex = new RegExp(`\\[${tag}\\]`, "gi");
+    if (regex.test(cleaned)) {
+      badges.push({ tag, ...meta });
+      cleaned = cleaned.replace(regex, "");
+    }
+  }
+
+  return {
+    cleanedText: cleaned.replace(/\s{2,}/g, " ").trim(),
+    badges,
+  };
+}
+
+/**
  * Parses SillyTavern style narrative actions inside asterisks (*action*)
  * and renders them in an elegant muted italic lavender font.
  */
@@ -155,53 +204,71 @@ export function SaanDialogueBubble({
 
       {/* Consecutive Natural Texting Bubbles (splitBurst) */}
       <div className="max-w-[90%] sm:max-w-[82%] space-y-2">
-        {bubbleList.map((bubbleText, idx) => (
-          <div
-            key={idx}
-            className="relative rounded-2xl p-4 bg-zinc-900/95 border border-zinc-800/90 text-zinc-100 rounded-bl-xs shadow-md transition-all duration-300 hover:border-zinc-700/80"
-          >
-            {/* Header only on first bubble */}
-            {idx === 0 && (
-              <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/60 pb-1.5 mb-2">
-                <span className="font-bold text-purple-400 flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5" /> Saan
-                </span>
+        {bubbleList.map((bubbleText, idx) => {
+          const { cleanedText, badges } = extractVtuberBadges(bubbleText);
 
-                {/* Swipe Alternatives Controls (< 1/3 >) */}
-                {totalAlts > 1 && (
-                  <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-400">
-                    <button
-                      type="button"
-                      disabled={currentAltIndex <= 0}
-                      onClick={() =>
-                        onSwipeAlternative?.(message.id, currentAltIndex - 1)
-                      }
-                      className="hover:text-purple-300 disabled:opacity-30"
+          return (
+            <div
+              key={idx}
+              className="relative rounded-2xl p-4 bg-zinc-900/95 border border-zinc-800/90 text-zinc-100 rounded-bl-xs shadow-md transition-all duration-300 hover:border-zinc-700/80"
+            >
+              {/* Header only on first bubble */}
+              {idx === 0 && (
+                <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/60 pb-1.5 mb-2">
+                  <span className="font-bold text-purple-400 flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5" /> Saan
+                  </span>
+
+                  {/* Swipe Alternatives Controls (< 1/3 >) */}
+                  {totalAlts > 1 && (
+                    <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-400">
+                      <button
+                        type="button"
+                        disabled={currentAltIndex <= 0}
+                        onClick={() =>
+                          onSwipeAlternative?.(message.id, currentAltIndex - 1)
+                        }
+                        className="hover:text-purple-300 disabled:opacity-30"
+                      >
+                        <ChevronLeft className="w-3 h-3" />
+                      </button>
+                      <span>
+                        {currentAltIndex + 1}/{totalAlts}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={currentAltIndex >= totalAlts - 1}
+                        onClick={() =>
+                          onSwipeAlternative?.(message.id, currentAltIndex + 1)
+                        }
+                        className="hover:text-purple-300 disabled:opacity-30"
+                      >
+                        <ChevronRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Open-LLM-VTuber Gesture & Motion Chips */}
+              {badges.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                  {badges.map((b, bIdx) => (
+                    <span
+                      key={bIdx}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border shadow-xs ${b.color}`}
                     >
-                      <ChevronLeft className="w-3 h-3" />
-                    </button>
-                    <span>
-                      {currentAltIndex + 1}/{totalAlts}
+                      <span>{b.icon}</span>
+                      <span>{b.label}</span>
                     </span>
-                    <button
-                      type="button"
-                      disabled={currentAltIndex >= totalAlts - 1}
-                      onClick={() =>
-                        onSwipeAlternative?.(message.id, currentAltIndex + 1)
-                      }
-                      className="hover:text-purple-300 disabled:opacity-30"
-                    >
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
 
-            {/* Formatted Speech + Narrative Text */}
-            <div className="text-sm">
-              <FormattedNarrativeText text={bubbleText} />
-            </div>
+              {/* Formatted Speech + Narrative Text */}
+              <div className="text-sm">
+                <FormattedNarrativeText text={cleanedText} />
+              </div>
 
             {/* Bubble Action Footer (Last Bubble only) */}
             {idx === bubbleList.length - 1 && (
@@ -253,7 +320,8 @@ export function SaanDialogueBubble({
               </div>
             )}
           </div>
-        ))}
+        );
+      })}
 
         {/* Autonomous Tool Execution (OpenHands) */}
         {message.actionResult && (

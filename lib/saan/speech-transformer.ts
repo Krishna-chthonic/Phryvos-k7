@@ -64,6 +64,75 @@ const CHEM_MAP: Record<string, string> = {
 };
 
 /**
+ * Generic counter-based nested delimiter filter (from Open-LLM-VTuber tts_preprocessor.py)
+ */
+export function filterNestedDelimiters(text: string, left: string, right: string): string {
+  if (!text || typeof text !== "string") return "";
+  const result: string[] = [];
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === left) {
+      depth++;
+    } else if (char === right) {
+      if (depth > 0) depth--;
+    } else {
+      if (depth === 0) {
+        result.push(char);
+      }
+    }
+  }
+  return result.join("").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Removes stage directions wrapped in asterisks (*smiles warmly*, **sighs**) from TTS audio.
+ */
+export function filterAsterisks(text: string): string {
+  if (!text) return "";
+  return text.replace(/\*{1,}(?:[^*]+)\*{1,}/g, "").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Filters stage directions (*actions*) and bracketed expression tags ([joy], [nod]) for speech audio.
+ */
+export function filterStageDirections(text: string): string {
+  if (!text) return "";
+  let clean = filterAsterisks(text);
+  clean = filterNestedDelimiters(clean, "[", "]");
+  return clean.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Phonetic Speakable Text Normalizer (from Open-LLM-VTuber speakable_prompt.txt)
+ * Converts numbers, dates, times, currencies, and alphanumeric strings into spoken prose.
+ */
+export function normalizeSpeakableText(text: string): string {
+  if (!text) return "";
+  let s = text;
+
+  // 1. Currency with cents: $50.25 -> 50 dollars and 25 cents
+  s = s.replace(/\$(\d+)\.(\d{2})\b/g, "$1 dollars and $2 cents");
+  s = s.replace(/\$(\d+)\b/g, "$1 dollars");
+
+  // 2. Times: 9:05 PM -> 9 oh 5 PM
+  s = s.replace(/\b(\d{1,2}):0(\d)\s*(AM|PM|am|pm)\b/g, "$1 oh $2 $3");
+  s = s.replace(/\b(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)\b/g, "$1 $2 $3");
+
+  // 3. Simple dates: MM/DD/YYYY
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  s = s.replace(/\b(0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12]\d|3[01])[\/\-](\d{4})\b/g, (_, m, d, y) => {
+    const monthName = months[parseInt(m, 10) - 1];
+    return `${monthName} ${parseInt(d, 10)}, ${y}`;
+  });
+
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/**
  * Escapes the `$` of a currency price outside code blocks so math parsers do not greedily pair it.
  * e.g. "$5, and the area is $x^2$" -> "\\$5, and the area is $x^2$"
  */

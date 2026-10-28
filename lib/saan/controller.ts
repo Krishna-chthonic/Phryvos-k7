@@ -26,9 +26,12 @@ import {
 import { runHuginnScan, getHuginnInsights } from "./huginn";
 import { getYggdrasilVizSummary, buildYggdrasilGraph } from "./yggdrasil";
 import { getDynamicStarterChips } from "./airi-starter-chips";
-import { toNaturalSpeechText } from "./speech-transformer";
+import { toNaturalSpeechText, normalizeSpeakableText } from "./speech-transformer";
 import { categorizeResponse } from "./airi-reasoning";
 import { parseStreamingControlTokens } from "./airi-streaming-control";
+import { globalAvatarMapper } from "./avatar-expressions";
+import { computeRmsVolumeEnvelope } from "./ordered-audio-queue";
+import { truncateHeardMemory } from "./interruption-contract";
 
 export interface SaanActionResult {
   success: boolean;
@@ -106,6 +109,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "transform_speech_text":
     case "categorize_text":
     case "parse_streaming_controls":
+    case "map_avatar_expression":
+    case "handle_avatar_tap":
+    case "normalize_speakable_text":
+    case "get_rms_volume_envelope":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -820,6 +827,82 @@ export function parseStreamingControlsAction(text: string): SaanActionResult {
 }
 
 /**
+ * Extracts Live2D facial expressions and physical gestures from text (Open-LLM-VTuber pattern)
+ */
+export function mapAvatarExpressionAction(text: string): SaanActionResult {
+  try {
+    const res = globalAvatarMapper.extract(text || "");
+    return {
+      success: true,
+      action: "map_avatar_expression",
+      tier: 1,
+      message: `Extracted ${res.expressions.length} expressions and ${res.motions.length} motions`,
+      data: res,
+    };
+  } catch (err: any) {
+    return { success: false, action: "map_avatar_expression", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Handles interactive touch / click reactions on Avatar hit areas (Open-LLM-VTuber pattern)
+ */
+export function handleAvatarTapAction(hitArea: "head" | "body"): SaanActionResult {
+  try {
+    const reaction = globalAvatarMapper.handleTap(hitArea);
+    return {
+      success: true,
+      action: "handle_avatar_tap",
+      tier: 1,
+      message: `Tapped ${hitArea}: ${reaction.dialogueEnglish}`,
+      data: reaction,
+    };
+  } catch (err: any) {
+    return { success: false, action: "handle_avatar_tap", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Normalizes speech text into natural spoken phonetic words (Open-LLM-VTuber pattern)
+ */
+export function normalizeSpeakableTextAction(text: string): SaanActionResult {
+  try {
+    const speakable = normalizeSpeakableText(text || "");
+    return {
+      success: true,
+      action: "normalize_speakable_text",
+      tier: 1,
+      message: "Normalized speakable text",
+      data: { speakableText: speakable },
+    };
+  } catch (err: any) {
+    return { success: false, action: "normalize_speakable_text", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Calculates 20ms RMS volume envelope for synchronous viseme mouth animation (Open-LLM-VTuber pattern)
+ */
+export function getRmsVolumeEnvelopeAction(
+  samples: number[],
+  sliceMs = 20,
+  sampleRate = 16000
+): SaanActionResult {
+  try {
+    const envelope = computeRmsVolumeEnvelope(samples || [], sliceMs, sampleRate);
+    return {
+      success: true,
+      action: "get_rms_volume_envelope",
+      tier: 1,
+      message: `Computed RMS volume envelope (${envelope.length} slices)`,
+      data: { envelope, sliceLengthMs: sliceMs },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_rms_volume_envelope", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -878,6 +961,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return categorizeTextAction(params.text);
     case "parse_streaming_controls":
       return parseStreamingControlsAction(params.text);
+    case "map_avatar_expression":
+      return mapAvatarExpressionAction(params.text);
+    case "handle_avatar_tap":
+      return handleAvatarTapAction(params.hitArea);
+    case "normalize_speakable_text":
+      return normalizeSpeakableTextAction(params.text);
+    case "get_rms_volume_envelope":
+      return getRmsVolumeEnvelopeAction(params.samples, params.sliceMs, params.sampleRate);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -887,7 +978,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope",
   "params": { ... }
 }
 \`\`\`
@@ -916,4 +1007,8 @@ Params guide:
 - reframe_memory: { "memoryId": 123, "newEmotion": "serene" | "hopeful", "reason": "optional" }
 - relive_memory: { "memoryId": 123 }
 - get_memory_graph: {}
+- map_avatar_expression: { "text": "speech text with [joy] tags" }
+- handle_avatar_tap: { "hitArea": "head" | "body" }
+- normalize_speakable_text: { "text": "raw text with $50.25 and 9:05 PM" }
+- get_rms_volume_envelope: { "samples": [0.1, -0.2, 0.5] }
 `;

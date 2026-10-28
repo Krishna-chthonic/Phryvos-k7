@@ -30,6 +30,7 @@ import { reinforceMemory } from "@/lib/saan/auto-promote";
 import { formatTimePrefix } from "@/lib/saan/airi-datetime";
 import { categorizeResponse } from "@/lib/saan/airi-reasoning";
 import { parseStreamingControlTokens } from "@/lib/saan/airi-streaming-control";
+import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Construct system prompt with tools and circadian presence
     let systemPrompt = buildSaanSystemPrompt(memories, bondScore, SAAN_TOOLS_SPEC);
+    systemPrompt += `\n\n${globalAvatarMapper.getPromptSpec()}`;
     if (antiSlopPrompt) {
       systemPrompt += `\n\n${antiSlopPrompt}`;
     }

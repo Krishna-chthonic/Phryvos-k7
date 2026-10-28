@@ -29,7 +29,8 @@ import {
   ExternalLink,
   ChevronDown,
 } from "lucide-react";
-import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
+import { toNaturalSpeechText, filterStageDirections } from "@/lib/saan/speech-transformer";
+import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { StatusCapsule } from "./StatusCapsule";
 
 interface ActionPayload {
@@ -104,6 +105,7 @@ export function SaanChat() {
   // Voice TTS & STT
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
   const [isListening, setIsListening] = React.useState(false);
+  const [avatarToast, setAvatarToast] = React.useState<string | null>(null);
 
   // Soul drawer data
   const [memories, setMemories] = React.useState<MemoryItem[]>([]);
@@ -200,7 +202,7 @@ export function SaanChat() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  // Text to Speech with Barge-In Interruption Support
+  // Text to Speech with Barge-In Interruption Support & Stage Directions Filter (Open-LLM-VTuber)
   const stopSpeech = () => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -211,12 +213,23 @@ export function SaanChat() {
     if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
       stopSpeech();
-      const naturalSpeech = toNaturalSpeechText(text);
+      const cleanText = filterStageDirections(text);
+      const naturalSpeech = toNaturalSpeechText(cleanText);
       const utterance = new SpeechSynthesisUtterance(naturalSpeech);
       utterance.rate = profile.isSleeping ? 0.9 : 1.0;
       utterance.pitch = 1.1; // Gentle, warmer voice
       window.speechSynthesis.speak(utterance);
     } catch {}
+  };
+
+  // Avatar Touch Interaction (Head / Body Tap Reaction)
+  const handleAvatarTapTrigger = (hitArea: "head" | "body") => {
+    const reaction = globalAvatarMapper.handleTap(hitArea);
+    setAvatarToast(`[${reaction.expression}] ${reaction.dialogueHinglish}`);
+    speakText(reaction.dialogueHinglish);
+    setTimeout(() => {
+      setAvatarToast(null);
+    }, 4500);
   };
 
   // Speech to Text (Mic input) with Barge-In Interruption
@@ -478,9 +491,21 @@ export function SaanChat() {
               <Menu className="h-4 w-4" />
             </button>
 
-            {/* Saan Avatar */}
-            <div className="h-7 w-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-border)] flex items-center justify-center shrink-0">
-              <Sparkles className="h-3.5 w-3.5 stroke-[1.8]" />
+            {/* Saan Avatar (Interactive Head/Body Tap - Open-LLM-VTuber) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => handleAvatarTapTrigger("head")}
+                className="h-7 w-7 rounded-[var(--radius-sm)] bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent-border)] flex items-center justify-center shrink-0 hover:scale-105 active:scale-95 transition cursor-pointer"
+                title="Tap Saan's avatar"
+              >
+                <Sparkles className="h-3.5 w-3.5 stroke-[1.8]" />
+              </button>
+              {avatarToast && (
+                <div className="absolute left-0 top-8 z-50 whitespace-nowrap bg-zinc-900 text-white text-[11px] px-2.5 py-1 rounded shadow-lg border border-pink-500/40 animate-in fade-in slide-in-from-top-1">
+                  {avatarToast}
+                </div>
+              )}
             </div>
 
             {/* Name & Circadian Status */}
@@ -623,44 +648,64 @@ export function SaanChat() {
                     }`}
                   >
                     {/* Saan Avatar & Header */}
-                    {!isUser && (
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <div className="h-5 w-5 rounded-[var(--radius-xs)] bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center shrink-0">
-                            <Sparkles className="h-3 w-3 stroke-[1.5]" />
+                    {!isUser && (() => {
+                      const avatarInfo = globalAvatarMapper.extract(m.text);
+                      return (
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="h-5 w-5 rounded-[var(--radius-xs)] bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center shrink-0">
+                              <Sparkles className="h-3 w-3 stroke-[1.5]" />
+                            </div>
+                            <span className="text-[11px] font-semibold text-[var(--fg-1)] uppercase tracking-wider">
+                              Saan
+                            </span>
+                            <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
+                              {m.time}
+                            </span>
+                            {/* Live2D Avatar Expression & Gesture Badges (Open-LLM-VTuber) */}
+                            {avatarInfo.expressions.map((emo) => (
+                              <span
+                                key={emo}
+                                className="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-pink-100/80 dark:bg-pink-950/50 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-900/40"
+                              >
+                                {emo}
+                              </span>
+                            ))}
+                            {avatarInfo.motions.map((mot) => (
+                              <span
+                                key={mot}
+                                className="px-1.5 py-0.2 rounded text-[10px] font-mono font-medium bg-indigo-100/80 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/40"
+                              >
+                                {mot}
+                              </span>
+                            ))}
                           </div>
-                          <span className="text-[11px] font-semibold text-[var(--fg-1)] uppercase tracking-wider">
-                            Saan
-                          </span>
-                          <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-mono">
-                            {m.time}
-                          </span>
-                        </div>
 
-                        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition">
-                          <button
-                            type="button"
-                            onClick={() => speakText(m.text)}
-                            className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                            title="Listen"
-                          >
-                            <Volume2 className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(m.id, m.text)}
-                            className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
-                            title="Copy text"
-                          >
-                            {copiedId === m.id ? (
-                              <Check className="h-3.5 w-3.5 text-emerald-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
+                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition">
+                            <button
+                              type="button"
+                              onClick={() => speakText(m.text)}
+                              className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                              title="Listen"
+                            >
+                              <Volume2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(m.id, m.text)}
+                              className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
+                              title="Copy text"
+                            >
+                              {copiedId === m.id ? (
+                                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Collapsible Thoughts Disclosure (Airi reasoning isolation pattern) */}
                     {m.thoughts && m.thoughts.length > 0 && (

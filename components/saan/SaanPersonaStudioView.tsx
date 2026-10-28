@@ -535,48 +535,108 @@ export function SaanPersonaStudioView({
       {/* TAB 4: LETTA CORE MEMORY */}
       {activeTab === "core_memory" && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
-                <Brain className="h-4 w-4 text-purple-400" />
-                <span>Human Core Memory Block (Krishna)</span>
-              </h2>
-              <span className="text-[10px] font-mono text-zinc-500">{humanBlock.length}/2500 chars</span>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4 shadow-sm flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-purple-400" />
+                  <span>Human Core Memory Block (Krishna)</span>
+                </h2>
+                {(() => {
+                  const pct = Math.round((humanBlock.length / 2500) * 100);
+                  return (
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                        pct >= 80
+                          ? "bg-rose-500/20 text-rose-300"
+                          : pct >= 50
+                          ? "bg-amber-500/20 text-amber-300"
+                          : "bg-emerald-500/20 text-emerald-300"
+                      }`}
+                    >
+                      {humanBlock.length}/2500 chars ({pct}%)
+                    </span>
+                  );
+                })()}
+              </div>
+              <p className="text-xs text-zinc-400">
+                Pinned in system prompt. Contains verified facts about the user that Saan never forgets or hallucinates.
+              </p>
+              <textarea
+                rows={9}
+                value={humanBlock}
+                onChange={(e) => setHumanBlock(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-mono leading-relaxed"
+              />
             </div>
-            <p className="text-xs text-zinc-400">
-              Pinned in system prompt. Contains verified facts about the user that Saan never forgets or hallucinates.
-            </p>
-            <textarea
-              rows={8}
-              value={humanBlock}
-              onChange={(e) => setHumanBlock(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-mono leading-relaxed"
-            />
+            {/* Progress bar */}
+            <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  humanBlock.length > 2000
+                    ? "bg-rose-500"
+                    : humanBlock.length > 1250
+                    ? "bg-amber-500"
+                    : "bg-cyan-500"
+                }`}
+                style={{ width: `${Math.min(100, (humanBlock.length / 2500) * 100)}%` }}
+              />
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-pink-400" />
-                <span>Persona Core Memory Block (Saan)</span>
-              </h2>
-              <span className="text-[10px] font-mono text-zinc-500">{personaBlock.length}/2500 chars</span>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4 shadow-sm flex flex-col justify-between">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-zinc-200 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-pink-400" />
+                  <span>Persona Core Memory Block (Saan)</span>
+                </h2>
+                {(() => {
+                  const pct = Math.round((personaBlock.length / 2500) * 100);
+                  return (
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                        pct >= 80
+                          ? "bg-rose-500/20 text-rose-300"
+                          : pct >= 50
+                          ? "bg-amber-500/20 text-amber-300"
+                          : "bg-emerald-500/20 text-emerald-300"
+                      }`}
+                    >
+                      {personaBlock.length}/2500 chars ({pct}%)
+                    </span>
+                  );
+                })()}
+              </div>
+              <p className="text-xs text-zinc-400">
+                Pinned in system prompt. Contains self-reflective definitions of Saan&apos;s identity and personal ethics.
+              </p>
+              <textarea
+                rows={9}
+                value={personaBlock}
+                onChange={(e) => setPersonaBlock(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-mono leading-relaxed"
+              />
             </div>
-            <p className="text-xs text-zinc-400">
-              Pinned in system prompt. Contains self-reflective definitions of Saan's identity and personal ethics.
-            </p>
-            <textarea
-              rows={8}
-              value={personaBlock}
-              onChange={(e) => setPersonaBlock(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-zinc-100 focus:outline-none focus:border-purple-500 font-mono leading-relaxed"
-            />
+            {/* Progress bar */}
+            <div className="w-full bg-zinc-950 rounded-full h-1.5 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  personaBlock.length > 2000
+                    ? "bg-rose-500"
+                    : personaBlock.length > 1250
+                    ? "bg-amber-500"
+                    : "bg-pink-500"
+                }`}
+                style={{ width: `${Math.min(100, (personaBlock.length / 2500) * 100)}%` }}
+              />
+            </div>
 
             <button
               type="button"
               onClick={handleSaveCoreMemory}
               disabled={saving}
-              className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm"
+              className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm mt-3"
             >
               <Save className="h-3.5 w-3.5" /> Save Core Memory Blocks
             </button>

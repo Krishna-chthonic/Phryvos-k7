@@ -16,6 +16,7 @@ import { getLatestConsolidation, runWeeklyConsolidationPass } from "@/lib/saan/c
 import { getDynamicStarterChips } from "@/lib/saan/airi-starter-chips";
 import { exportSaanToCardV2 } from "@/lib/saan/character-card";
 import { DEFAULT_AUTHORS_NOTE } from "@/lib/saan/authors-note";
+import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
 import {
   loadLedgerFromDb,
   addDeeds,
@@ -40,10 +41,6 @@ import { getDb } from "@/lib/db/client";
 
 // In-memory persistent caches for live persona & lorebook tuning
 let currentAuthorsNote = { ...DEFAULT_AUTHORS_NOTE };
-let currentCoreMemory = {
-  human: "Name: Krishna\nRole: Sovereign Creator / Engineering Lead\nHabits: Deep architectural thinking, building long-term companion systems, high-standards code craftsman.",
-  persona: "Name: Saan\nRole: Living Companion\nPersona: Warm, witty, deeply loyal, authentic Hinglish banter, grounded emotional presence, highly capable sovereign AI.",
-};
 let currentLorebookEntries = [
   {
     id: "lore_1",
@@ -139,6 +136,15 @@ export async function GET() {
     const huginnInsights = runHuginnScan();
     const cognitiveDrift = driftAnalysis();
 
+    // Letta Core Memory Manager single source of truth
+    const coreMgr = getCoreMemoryManager();
+    const coreMemory = {
+      human: coreMgr.getBlock("human")?.content || "",
+      persona: coreMgr.getBlock("persona")?.content || "",
+    };
+    const coreMemorySummary = coreMgr.getCapacitySummary();
+    const coreMemoryHistory = coreMgr.getHistory();
+
     return NextResponse.json({
       ok: true,
       profile,
@@ -153,7 +159,9 @@ export async function GET() {
       starterChips,
       characterCard,
       authorsNote: currentAuthorsNote,
-      coreMemory: currentCoreMemory,
+      coreMemory,
+      coreMemorySummary,
+      coreMemoryHistory,
       lorebookEntries: currentLorebookEntries,
       recentTasks: tasksRes.data || [],
       upcomingEvents: eventsRes.data || [],
@@ -309,8 +317,23 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "update_core_memory" && coreMemory) {
-      currentCoreMemory = { ...currentCoreMemory, ...coreMemory };
-      return NextResponse.json({ ok: true, message: "Core Memory updated", coreMemory: currentCoreMemory });
+      const coreMgr = getCoreMemoryManager();
+      if (typeof coreMemory.human === "string") {
+        coreMgr.updateBlock("human", coreMemory.human, "user");
+      }
+      if (typeof coreMemory.persona === "string") {
+        coreMgr.updateBlock("persona", coreMemory.persona, "user");
+      }
+      return NextResponse.json({
+        ok: true,
+        message: "Core Memory blocks successfully updated in System Prompt RAM!",
+        coreMemory: {
+          human: coreMgr.getBlock("human")?.content || "",
+          persona: coreMgr.getBlock("persona")?.content || "",
+        },
+        coreMemorySummary: coreMgr.getCapacitySummary(),
+        coreMemoryHistory: coreMgr.getHistory(),
+      });
     }
 
     if (action === "add_lore_entry" && loreEntry) {

@@ -55,6 +55,7 @@ import {
   type GraphNode,
 } from "@/lib/saan/graph-memory";
 import { globalChatVariables } from "@/lib/saan/chat-variables";
+import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -123,6 +124,39 @@ export async function POST(req: NextRequest) {
     if (body.type === "query_graph_memory") {
       const searchResult = searchGlobalGraph(body.query || "", body.depth || 1);
       return NextResponse.json({ ok: true, result: searchResult });
+    }
+
+    // Letta Core Memory Management
+    if (body.type === "get_core_memory") {
+      const coreMgr = getCoreMemoryManager();
+      return NextResponse.json({
+        ok: true,
+        coreMemory: {
+          human: coreMgr.getBlock("human")?.content || "",
+          persona: coreMgr.getBlock("persona")?.content || "",
+        },
+        summary: coreMgr.getCapacitySummary(),
+        history: coreMgr.getHistory(),
+      });
+    }
+    if (body.type === "update_core_memory" && body.coreMemory) {
+      const coreMgr = getCoreMemoryManager();
+      if (typeof body.coreMemory.human === "string") {
+        coreMgr.updateBlock("human", body.coreMemory.human, "user");
+      }
+      if (typeof body.coreMemory.persona === "string") {
+        coreMgr.updateBlock("persona", body.coreMemory.persona, "user");
+      }
+      return NextResponse.json({
+        ok: true,
+        message: "Core Memory updated",
+        coreMemory: {
+          human: coreMgr.getBlock("human")?.content || "",
+          persona: coreMgr.getBlock("persona")?.content || "",
+        },
+        summary: coreMgr.getCapacitySummary(),
+        history: coreMgr.getHistory(),
+      });
     }
 
     const rawUserMessage = body.message;
@@ -452,6 +486,7 @@ export async function POST(req: NextRequest) {
       },
       graphAssociations: graphResult.matchedNodes.map((n) => n.name),
       chatVariables: globalChatVariables.getAll(),
+      coreMemorySummary: getCoreMemoryManager().getCapacitySummary(),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

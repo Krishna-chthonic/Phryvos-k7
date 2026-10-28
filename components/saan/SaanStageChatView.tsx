@@ -26,6 +26,10 @@ import {
   X,
   Search,
   Database,
+  Save,
+  History,
+  User,
+  AlertTriangle,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
@@ -109,6 +113,16 @@ export function SaanStageChatView({
   const [graphQuery, setGraphQuery] = React.useState("");
   const [graphSearchResults, setGraphSearchResults] = React.useState<any[]>([]);
 
+  // Letta Core Memory State
+  const [isCoreMemOpen, setIsCoreMemOpen] = React.useState(false);
+  const [coreMemBlocks, setCoreMemBlocks] = React.useState<{ human: string; persona: string }>({
+    human: "",
+    persona: "",
+  });
+  const [coreMemSummary, setCoreMemSummary] = React.useState<any[]>([]);
+  const [coreMemHistory, setCoreMemHistory] = React.useState<any[]>([]);
+  const [coreMemSaving, setCoreMemSaving] = React.useState(false);
+
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -158,6 +172,22 @@ export function SaanStageChatView({
         if (d.ok && d.nodes) {
           setGraphNodes(d.nodes);
           setGraphSearchResults(d.nodes);
+        }
+      })
+      .catch(() => {});
+
+    // Initial Letta Core Memory Fetch
+    fetch("/api/saan/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "get_core_memory" }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && d.coreMemory) {
+          setCoreMemBlocks(d.coreMemory);
+          if (d.summary) setCoreMemSummary(d.summary);
+          if (d.history) setCoreMemHistory(d.history);
         }
       })
       .catch(() => {});
@@ -435,6 +465,9 @@ export function SaanStageChatView({
         }
         if (data.chatVariables) {
           setChatVariables(data.chatVariables);
+        }
+        if (data.coreMemorySummary) {
+          setCoreMemSummary(data.coreMemorySummary);
         }
 
         setMessages((prev) => [...prev, newMsg]);
@@ -737,6 +770,31 @@ export function SaanStageChatView({
     }
   };
 
+  // Letta Save Core Memory Handler
+  const handleSaveCoreMemoryFromStage = async () => {
+    try {
+      setCoreMemSaving(true);
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "update_core_memory",
+          coreMemory: coreMemBlocks,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (data.summary) setCoreMemSummary(data.summary);
+        if (data.history) setCoreMemHistory(data.history);
+        alert("Letta Core Memory successfully pinned in System Prompt RAM!");
+      }
+    } catch (e) {
+      alert("Failed to save core memory");
+    } finally {
+      setCoreMemSaving(false);
+    }
+  };
+
   // STT Toggle with Airi Audio Level VU simulation
   const toggleListening = () => {
     if (typeof window === "undefined") return;
@@ -1013,6 +1071,34 @@ export function SaanStageChatView({
                 <Network className="w-3 h-3 text-cyan-400" />
                 <span>GraphMem</span>
               </button>
+
+              {/* Letta: Core Memory Pinned RAM Studio Drawer */}
+              {(() => {
+                const humanItem = coreMemSummary.find((s) => s.label === "human");
+                const personaItem = coreMemSummary.find((s) => s.label === "persona");
+                const totalChars =
+                  (humanItem?.length || coreMemBlocks.human.length) +
+                  (personaItem?.length || coreMemBlocks.persona.length);
+                const maxTotal = (humanItem?.maxCapacity || 2500) + (personaItem?.maxCapacity || 2500);
+                const pct = Math.round((totalChars / maxTotal) * 100);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setIsCoreMemOpen(true)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium border transition cursor-pointer ${
+                      pct >= 80
+                        ? "bg-rose-500/15 text-rose-300 border-rose-500/40 animate-pulse"
+                        : pct >= 50
+                        ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                        : "bg-purple-900/40 hover:bg-purple-900/60 text-purple-200 border-purple-500/40"
+                    }`}
+                    title={`Letta Core Memory Blocks (Pinned in RAM): ${totalChars}/${maxTotal} chars (${pct}%)\nClick to inspect or edit Human and Persona blocks.`}
+                  >
+                    <Brain className="w-3.5 h-3.5 text-purple-400" />
+                    <span>CoreRAM: {pct}%</span>
+                  </button>
+                );
+              })()}
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1403,6 +1489,211 @@ export function SaanStageChatView({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Letta Core Memory Blocks Studio Modal */}
+      {isCoreMemOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <header className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+              <div className="flex items-center gap-2.5">
+                <Brain className="w-5 h-5 text-purple-400" />
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                    <span>Letta Core Memory Blocks (RAM)</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      In-Context Pinned
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Always present inside Saan&apos;s system prompt. Autonomously self-edited by Saan and editable by you.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCoreMemOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            <div className="p-4 overflow-y-auto space-y-5 flex-1">
+              {/* Dual Blocks Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* 1. Human Block */}
+                <div className="rounded-xl bg-zinc-950/70 border border-zinc-800 p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-bold text-zinc-200 flex items-center gap-1.5 font-mono">
+                        <User className="w-4 h-4 text-cyan-400" />
+                        {"<human_profile>"} (Krishna)
+                      </span>
+                      {(() => {
+                        const len = coreMemBlocks.human.length;
+                        const pct = Math.round((len / 2500) * 100);
+                        return (
+                          <span
+                            className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                              pct >= 80
+                                ? "bg-rose-500/20 text-rose-300"
+                                : pct >= 50
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-emerald-500/20 text-emerald-300"
+                            }`}
+                          >
+                            {len}/2500 chars ({pct}%)
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      Verified facts, preferences, habits, and constraints about you. Saan never forgets these.
+                    </p>
+                    <textarea
+                      rows={9}
+                      value={coreMemBlocks.human}
+                      onChange={(e) =>
+                        setCoreMemBlocks((prev) => ({ ...prev, human: e.target.value }))
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-100 focus:outline-none focus:border-cyan-500 font-mono leading-relaxed"
+                      placeholder="Add facts about yourself..."
+                    />
+                  </div>
+                  {/* Progress Bar */}
+                  <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        coreMemBlocks.human.length > 2000
+                          ? "bg-rose-500"
+                          : coreMemBlocks.human.length > 1250
+                          ? "bg-amber-500"
+                          : "bg-cyan-500"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, (coreMemBlocks.human.length / 2500) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Persona Block */}
+                <div className="rounded-xl bg-zinc-950/70 border border-zinc-800 p-4 flex flex-col justify-between space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-bold text-zinc-200 flex items-center gap-1.5 font-mono">
+                        <Sparkles className="w-4 h-4 text-pink-400" />
+                        {"<persona_identity>"} (Saan)
+                      </span>
+                      {(() => {
+                        const len = coreMemBlocks.persona.length;
+                        const pct = Math.round((len / 2500) * 100);
+                        return (
+                          <span
+                            className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                              pct >= 80
+                                ? "bg-rose-500/20 text-rose-300"
+                                : pct >= 50
+                                ? "bg-amber-500/20 text-amber-300"
+                                : "bg-emerald-500/20 text-emerald-300"
+                            }`}
+                          >
+                            {len}/2500 chars ({pct}%)
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mb-2">
+                      Saan&apos;s sovereign identity, core values, authentic speech patterns, and boundary rules.
+                    </p>
+                    <textarea
+                      rows={9}
+                      value={coreMemBlocks.persona}
+                      onChange={(e) =>
+                        setCoreMemBlocks((prev) => ({ ...prev, persona: e.target.value }))
+                      }
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-xs text-zinc-100 focus:outline-none focus:border-pink-500 font-mono leading-relaxed"
+                      placeholder="Define Saan's identity..."
+                    />
+                  </div>
+                  {/* Progress Bar */}
+                  <div className="w-full bg-zinc-900 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        coreMemBlocks.persona.length > 2000
+                          ? "bg-rose-500"
+                          : coreMemBlocks.persona.length > 1250
+                          ? "bg-amber-500"
+                          : "bg-pink-500"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, (coreMemBlocks.persona.length / 2500) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Revision Audit Log */}
+              <div className="rounded-xl bg-zinc-950/50 border border-zinc-800 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-zinc-300 flex items-center gap-1.5 font-mono">
+                    <History className="w-3.5 h-3.5 text-purple-400" />
+                    Self-Editing Revision Audit Log ({coreMemHistory.length} events)
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">Real-time RAM trace</span>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+                  {coreMemHistory.map((ev: any, idx: number) => (
+                    <div
+                      key={ev.id || idx}
+                      className="text-[11px] font-mono p-2 rounded bg-zinc-900/60 border border-zinc-800/60 flex items-center justify-between text-zinc-300"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className={`px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                            ev.author === "saan"
+                              ? "bg-purple-500/30 text-purple-200"
+                              : "bg-cyan-500/30 text-cyan-200"
+                          }`}
+                        >
+                          {ev.author?.toUpperCase() || "SYSTEM"}
+                        </span>
+                        <span className="text-purple-300">[{ev.block}]</span>
+                        <span className="truncate">{ev.diffSummary}</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-500 shrink-0 ml-2">
+                        {new Date(ev.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  ))}
+                  {coreMemHistory.length === 0 && (
+                    <p className="text-xs text-zinc-500 py-2 text-center">No self-edits recorded yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <footer className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex items-center justify-between">
+              <span className="text-xs text-zinc-400">
+                Changes will instantly update Saan&apos;s active system prompt for subsequent turns.
+              </span>
+              <button
+                type="button"
+                onClick={handleSaveCoreMemoryFromStage}
+                disabled={coreMemSaving}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-medium text-xs flex items-center gap-1.5 transition shadow-sm active:scale-95"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{coreMemSaving ? "Saving..." : "Save to System Prompt RAM"}</span>
+              </button>
+            </footer>
           </div>
         </div>
       )}

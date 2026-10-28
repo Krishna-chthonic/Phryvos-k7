@@ -32,6 +32,11 @@ import { parseStreamingControlTokens } from "./airi-streaming-control";
 import { globalAvatarMapper } from "./avatar-expressions";
 import { computeRmsVolumeEnvelope } from "./ordered-audio-queue";
 import { truncateHeardMemory } from "./interruption-contract";
+import { parseCharacterCardJson, exportSaanToCardV2 } from "./character-card";
+import { evaluateLorebook, type LoreEntry } from "./lorebook";
+import { substituteMacros } from "./macro-engine";
+import { getAuthorsNoteInjection, DEFAULT_AUTHORS_NOTE } from "./authors-note";
+import { globalChatVariables } from "./chat-variables";
 
 export interface SaanActionResult {
   success: boolean;
@@ -113,6 +118,13 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "handle_avatar_tap":
     case "normalize_speakable_text":
     case "get_rms_volume_envelope":
+    case "parse_character_card":
+    case "export_character_card":
+    case "evaluate_lorebook":
+    case "substitute_macros":
+    case "get_authors_note":
+    case "get_chat_variable":
+    case "set_chat_variable":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -903,6 +915,140 @@ export function getRmsVolumeEnvelopeAction(
 }
 
 /**
+ * Parses Character Card V2 or V3 data (SillyTavern pattern)
+ */
+export function parseCharacterCardAction(cardData: string | Record<string, any>): SaanActionResult {
+  try {
+    const card = parseCharacterCardJson(cardData);
+    return {
+      success: true,
+      action: "parse_character_card",
+      tier: 1,
+      message: `Parsed Character Card: ${card.data.name} (${card.spec})`,
+      data: card,
+    };
+  } catch (err: any) {
+    return { success: false, action: "parse_character_card", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Exports Saan's profile as a standardized Character Card V2 (SillyTavern pattern)
+ */
+export function exportCharacterCardAction(): SaanActionResult {
+  try {
+    const card = exportSaanToCardV2();
+    return {
+      success: true,
+      action: "export_character_card",
+      tier: 1,
+      message: `Exported Saan Character Card V2 (${card.data.name})`,
+      data: card,
+    };
+  } catch (err: any) {
+    return { success: false, action: "export_character_card", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Evaluates World Info / Lorebook entries with secondary keys & timed effects (SillyTavern pattern)
+ */
+export function evaluateLorebookAction(
+  text: string,
+  entries: LoreEntry[] = [],
+  currentTurn = 1
+): SaanActionResult {
+  try {
+    const result = evaluateLorebook(text, entries, {
+      currentTurn,
+      activeSticky: {},
+      activeCooldown: {},
+    });
+    return {
+      success: true,
+      action: "evaluate_lorebook",
+      tier: 1,
+      message: `Activated ${result.activatedEntries.length} lore entries`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "evaluate_lorebook", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Substitutes conversational and temporal macros in a prompt template (SillyTavern pattern)
+ */
+export function substituteMacrosAction(template: string, ctx: any = {}): SaanActionResult {
+  try {
+    const substituted = substituteMacros(template, ctx);
+    return {
+      success: true,
+      action: "substitute_macros",
+      tier: 1,
+      message: "Substituted macro variables",
+      data: { substituted },
+    };
+  } catch (err: any) {
+    return { success: false, action: "substitute_macros", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Gets the Author's Note floating directive for the given turn count (SillyTavern pattern)
+ */
+export function getAuthorsNoteAction(turnCount = 1): SaanActionResult {
+  try {
+    const injection = getAuthorsNoteInjection(turnCount, DEFAULT_AUTHORS_NOTE);
+    return {
+      success: true,
+      action: "get_authors_note",
+      tier: 1,
+      message: injection ? "Author's Note active" : "Author's Note inactive for this turn",
+      data: injection,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_authors_note", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Gets a chat variable from local memory store (SillyTavern pattern)
+ */
+export function getChatVariableAction(key: string): SaanActionResult {
+  try {
+    const value = globalChatVariables.get(key);
+    return {
+      success: true,
+      action: "get_chat_variable",
+      tier: 1,
+      message: `Retrieved variable ${key}`,
+      data: { key, value },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_chat_variable", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Sets a chat variable in local memory store (SillyTavern pattern)
+ */
+export function setChatVariableAction(key: string, value: any): SaanActionResult {
+  try {
+    globalChatVariables.set(key, value);
+    return {
+      success: true,
+      action: "set_chat_variable",
+      tier: 1,
+      message: `Set variable ${key} = ${value}`,
+      data: { key, value },
+    };
+  } catch (err: any) {
+    return { success: false, action: "set_chat_variable", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -969,6 +1115,20 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return normalizeSpeakableTextAction(params.text);
     case "get_rms_volume_envelope":
       return getRmsVolumeEnvelopeAction(params.samples, params.sliceMs, params.sampleRate);
+    case "parse_character_card":
+      return parseCharacterCardAction(params.cardData);
+    case "export_character_card":
+      return exportCharacterCardAction();
+    case "evaluate_lorebook":
+      return evaluateLorebookAction(params.text, params.entries, params.currentTurn);
+    case "substitute_macros":
+      return substituteMacrosAction(params.template, params.ctx);
+    case "get_authors_note":
+      return getAuthorsNoteAction(params.turnCount);
+    case "get_chat_variable":
+      return getChatVariableAction(params.key);
+    case "set_chat_variable":
+      return setChatVariableAction(params.key, params.value);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -978,7 +1138,7 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable",
   "params": { ... }
 }
 \`\`\`
@@ -1011,4 +1171,11 @@ Params guide:
 - handle_avatar_tap: { "hitArea": "head" | "body" }
 - normalize_speakable_text: { "text": "raw text with $50.25 and 9:05 PM" }
 - get_rms_volume_envelope: { "samples": [0.1, -0.2, 0.5] }
+- parse_character_card: { "cardData": { "name": "...", "spec": "chara_card_v2" } }
+- export_character_card: {}
+- evaluate_lorebook: { "text": "...", "entries": [...] }
+- substitute_macros: { "template": "Hello {{user}}, I am {{char}}" }
+- get_authors_note: { "turnCount": 2 }
+- get_chat_variable: { "key": "affection" }
+- set_chat_variable: { "key": "affection", "value": 10 }
 `;

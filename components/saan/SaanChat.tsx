@@ -51,6 +51,8 @@ interface ChatMessage {
   reaction?: string | null;
   thoughts?: string[];
   plans?: string[];
+  swipes?: string[];
+  swipeIndex?: number;
 }
 
 interface SaanProfile {
@@ -230,6 +232,41 @@ export function SaanChat() {
     setTimeout(() => {
       setAvatarToast(null);
     }, 4500);
+  };
+
+  // SillyTavern Multi-Swipe Response Navigation
+  const handlePrevSwipe = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id === msgId && msg.swipes && msg.swipes.length > 1) {
+          const currentIdx = msg.swipeIndex ?? 0;
+          const nextIdx = (currentIdx - 1 + msg.swipes.length) % msg.swipes.length;
+          return {
+            ...msg,
+            swipeIndex: nextIdx,
+            text: msg.swipes[nextIdx],
+          };
+        }
+        return msg;
+      })
+    );
+  };
+
+  const handleNextSwipe = (msgId: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id === msgId && msg.swipes && msg.swipes.length > 1) {
+          const currentIdx = msg.swipeIndex ?? 0;
+          const nextIdx = (currentIdx + 1) % msg.swipes.length;
+          return {
+            ...msg,
+            swipeIndex: nextIdx,
+            text: msg.swipes[nextIdx],
+          };
+        }
+        return msg;
+      })
+    );
   };
 
   // Speech to Text (Mic input) with Barge-In Interruption
@@ -681,27 +718,54 @@ export function SaanChat() {
                             ))}
                           </div>
 
-                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition">
-                            <button
-                              type="button"
-                              onClick={() => speakText(m.text)}
-                              className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                              title="Listen"
-                            >
-                              <Volume2 className="h-3.5 w-3.5" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(m.id, m.text)}
-                              className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
-                              title="Copy text"
-                            >
-                              {copiedId === m.id ? (
-                                <Check className="h-3.5 w-3.5 text-emerald-500" />
-                              ) : (
-                                <Copy className="h-3.5 w-3.5" />
-                              )}
-                            </button>
+                          <div className="flex items-center gap-1.5">
+                            {/* SillyTavern Multi-Swipe Response Navigator */}
+                            {m.swipes && m.swipes.length > 1 && (
+                              <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono bg-zinc-100 dark:bg-zinc-800/60 px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-700 select-none">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrevSwipe(m.id)}
+                                  className="hover:text-zinc-900 dark:hover:text-zinc-100 px-0.5 cursor-pointer"
+                                  title="Previous swipe"
+                                >
+                                  ◀
+                                </button>
+                                <span>
+                                  {(m.swipeIndex ?? 0) + 1}/{m.swipes.length}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleNextSwipe(m.id)}
+                                  className="hover:text-zinc-900 dark:hover:text-zinc-100 px-0.5 cursor-pointer"
+                                  title="Next swipe"
+                                >
+                                  ▶
+                                </button>
+                              </div>
+                            )}
+
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1.5 transition">
+                              <button
+                                type="button"
+                                onClick={() => speakText(m.text)}
+                                className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                                title="Listen"
+                              >
+                                <Volume2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(m.id, m.text)}
+                                className="flex items-center gap-1 text-[11px] text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition"
+                                title="Copy text"
+                              >
+                                {copiedId === m.id ? (
+                                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

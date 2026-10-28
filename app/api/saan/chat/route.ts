@@ -31,6 +31,11 @@ import { formatTimePrefix } from "@/lib/saan/airi-datetime";
 import { categorizeResponse } from "@/lib/saan/airi-reasoning";
 import { parseStreamingControlTokens } from "@/lib/saan/airi-streaming-control";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
+import { substituteMacros } from "@/lib/saan/macro-engine";
+import { insertPromptsAtDepth } from "@/lib/saan/depth-injector";
+import { getAuthorsNoteInjection } from "@/lib/saan/authors-note";
+import { mergeConsecutiveRoles } from "@/lib/saan/prompt-merger";
+import { applyRegexPipeline } from "@/lib/saan/regex-pipeline";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -110,14 +115,30 @@ export async function POST(req: NextRequest) {
       systemPrompt += `\n\n${directorNote}`;
     }
 
+    // SillyTavern Macro substitution on system prompt
+    systemPrompt = substituteMacros(systemPrompt, {
+      charName: "Saan",
+      userName: "Krishna",
+      lastUserMessage: rawUserMessage,
+    });
+
     // Airi temporal anchor prefix for user turns
     const timeStampedUserMessage = `${formatTimePrefix()}${spokenNarrative}`;
 
-    const messages = [
+    let messages = [
       { role: "system" as const, content: systemPrompt },
       ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
       { role: "user" as const, content: timeStampedUserMessage },
     ];
+
+    // SillyTavern Context Depth Injection (Author's Note @ depth 2)
+    const anInjection = getAuthorsNoteInjection(history.length);
+    if (anInjection) {
+      messages = insertPromptsAtDepth(messages, [anInjection]);
+    }
+
+    // SillyTavern Consecutive Role Merge Engine (strict turn alternation)
+    messages = mergeConsecutiveRoles(messages);
 
     let reply = "";
 
@@ -233,6 +254,7 @@ export async function POST(req: NextRequest) {
 
     // 5. Post-Generation Anti-AI Cliché Sanitization (SillyTavern pattern)
     reply = sanitizeSaanOutput(reply);
+    reply = applyRegexPipeline(reply, "ai_output");
 
     // 6. HerAndHim Multi-Bubble Burst & Reply Pacing Toolkit
     const bubbles = splitBurst(reply);

@@ -40,6 +40,10 @@ import { globalChatVariables } from "./chat-variables";
 import { clampOutputTokens, pruneContextTurns } from "./token-budget";
 import { getGraphMemoryStore } from "./graph-memory";
 import { ProviderCascadeEngine } from "./provider-cascade";
+import { evaluateMem0Decision, createMemoryAuditEvent } from "./mem0-decision-matrix";
+import { getCoreMemoryManager } from "./core-memory-blocks";
+import { getTemporalEdgeGraphStore } from "./temporal-edge-graph";
+import { parseTemporalQueryBounds } from "./temporal-query-engine";
 
 export interface SaanActionResult {
   success: boolean;
@@ -131,6 +135,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_token_budget":
     case "query_graph_memory":
     case "test_provider_cascade":
+    case "apply_mem0_decision":
+    case "edit_core_memory":
+    case "query_temporal_graph":
+    case "parse_temporal_query":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1132,6 +1140,92 @@ export async function testProviderCascadeAction(
 }
 
 /**
+ * Evaluates Mem0 4-state memory mutation decision (ADD, UPDATE, DELETE, NONE)
+ */
+export function applyMem0DecisionAction(candidate: any, existingMemories: any[] = []): SaanActionResult {
+  try {
+    const decision = evaluateMem0Decision(candidate, existingMemories);
+    return {
+      success: true,
+      action: "apply_mem0_decision",
+      tier: 1,
+      message: `Mem0 Decision: ${decision.event} - ${decision.reason}`,
+      data: decision,
+    };
+  } catch (err: any) {
+    return { success: false, action: "apply_mem0_decision", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Self-editing Letta core memory block tool (append or replace)
+ */
+export function editCoreMemoryAction(
+  operation: "append" | "replace",
+  block: "human" | "persona" = "human",
+  content = "",
+  oldContent = ""
+): SaanActionResult {
+  try {
+    const manager = getCoreMemoryManager();
+    let res: any;
+    if (operation === "replace") {
+      res = manager.replace(block, oldContent, content);
+    } else {
+      res = manager.append(block, content);
+    }
+    return {
+      success: res.success,
+      action: "edit_core_memory",
+      tier: 1,
+      message: res.message,
+      data: { block, operation, res },
+    };
+  } catch (err: any) {
+    return { success: false, action: "edit_core_memory", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Queries bi-temporal knowledge graph edges (Graphiti pattern)
+ */
+export function queryTemporalGraphAction(nodeName: string, asOfTimestamp?: number): SaanActionResult {
+  try {
+    const store = getTemporalEdgeGraphStore();
+    const edges = store.findConnectedEdges(nodeName, asOfTimestamp);
+    return {
+      success: true,
+      action: "query_temporal_graph",
+      tier: 1,
+      message: `Found ${edges.length} active temporal edges for node "${nodeName}"`,
+      data: { nodeName, edges },
+    };
+  } catch (err: any) {
+    return { success: false, action: "query_temporal_graph", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Parses natural language relative temporal query into bounding timestamps (Hindsight pattern)
+ */
+export function parseTemporalQueryAction(query: string): SaanActionResult {
+  try {
+    const interval = parseTemporalQueryBounds(query);
+    return {
+      success: true,
+      action: "parse_temporal_query",
+      tier: 1,
+      message: interval.hasConstraint
+        ? `Temporal query bounded: ${interval.matchedPhrase} [${new Date(interval.startTimeMs).toISOString()} to ${new Date(interval.endTimeMs).toISOString()}]`
+        : "No explicit temporal constraint detected in query",
+      data: interval,
+    };
+  } catch (err: any) {
+    return { success: false, action: "parse_temporal_query", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1218,6 +1312,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return queryGraphMemoryAction(params.query, params.searchDepth);
     case "test_provider_cascade":
       return testProviderCascadeAction(params.primaryModel, params.fallbackModels);
+    case "apply_mem0_decision":
+      return applyMem0DecisionAction(params.candidate, params.existingMemories);
+    case "edit_core_memory":
+      return editCoreMemoryAction(params.operation, params.block, params.content, params.oldContent);
+    case "query_temporal_graph":
+      return queryTemporalGraphAction(params.nodeName, params.asOfTimestamp);
+    case "parse_temporal_query":
+      return parseTemporalQueryAction(params.query);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1227,12 +1329,16 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- apply_mem0_decision: { "candidate": { "text": "I moved to Seattle", "category": "preference", "sourceRole": "user" }, "existingMemories": [] }
+- edit_core_memory: { "operation": "append" | "replace", "block": "human" | "persona", "content": "new text", "oldContent": "to replace" }
+- query_temporal_graph: { "nodeName": "Seattle", "asOfTimestamp": 1729000000000 }
+- parse_temporal_query: { "query": "What did we talk about yesterday?" }
 - get_token_budget: { "inputTokens": 1000, "maxContext": 8192, "maxResponse": 2048 }
 - query_graph_memory: { "query": "technology", "searchDepth": 2 }
 - test_provider_cascade: { "primaryModel": "model-a", "fallbackModels": ["model-b"] }

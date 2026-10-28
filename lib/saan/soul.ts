@@ -21,6 +21,7 @@ import { ANTI_CONFABULATION_CLAUSE } from "./anti-confabulation";
 import { loadLedgerFromDb, dueDeeds, renderConsequences } from "./ledger";
 import { renderDriftsForPrompt } from "./relationship-drift";
 import { getLatestSelfModel } from "./self-model";
+import { getCoreMemoryManager } from "./core-memory-blocks";
 
 export interface RelationshipTensor {
   temperature: number; // 0-100 warmth & affection
@@ -343,6 +344,9 @@ ${driftsNotice ? `\n${driftsNotice}\n` : ""}
 
 ${upcomingDates ? `\n${upcomingDates}\n` : ""}
 ${dueWishes ? `\n${dueWishes}\n` : ""}
+
+CORE MEMORY (Letta Paged Core Blocks):
+${getCoreMemoryManager().renderForSystemPrompt()}
 
 AUTHENTIC HUMAN CONVERSATION PRINCIPLES:
 1. Zero AI Clichés:

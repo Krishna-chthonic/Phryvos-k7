@@ -55,6 +55,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: rollbackRes.success, message: rollbackRes.message });
     }
 
+    // Direct Action Dispatch for Saan 50-Repo OS Cockpit
+    if (body.type === "action" && body.action) {
+      const actionRes = await dispatchSaanAction(body.action, body.params || {});
+      return NextResponse.json({ ok: actionRes.success, actionResult: actionRes });
+    }
+
     const rawUserMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 

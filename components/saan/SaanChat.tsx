@@ -96,7 +96,11 @@ const STARTER_PROMPTS = [
   "Thoda tired feel ho raha hai, kuch chill baat karein?",
 ];
 
-export function SaanChat() {
+interface SaanChatProps {
+  onOpenCockpit?: () => void;
+}
+
+export function SaanChat({ onOpenCockpit }: SaanChatProps = {}) {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -608,6 +612,20 @@ export function SaanChat() {
             >
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
+
+            {/* 50-Repo OS Cockpit Button */}
+            {onOpenCockpit && (
+              <button
+                type="button"
+                onClick={onOpenCockpit}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 active:scale-95 transition text-xs font-semibold shadow-xs"
+                title="Open 50-Repo Living Companion OS Cockpit"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">50-Repo Cockpit</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-600 text-white font-mono">50</span>
+              </button>
+            )}
 
             {/* Soul Drawer Toggle */}
             <button

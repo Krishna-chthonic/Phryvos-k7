@@ -67,12 +67,28 @@ import {
   type SecurityRiskLevel,
   RepairableActionException,
 } from "./observable-action-stream";
+import { InteractiveGateManager, type ApprovalCard, type CommandExecutionApprovalDecision } from "./interactive-confirmation-gate";
+import { ScheduleResearchPlanner, type ScheduledSlot } from "./schedule-research-planner";
+import { IdempotencyBackoffEngine, computeBackoff } from "./idempotency-backoff-retry";
+import {
+  SqliteThreadCheckpointer,
+  LeaseLockManager,
+  HonestPresenceEngine,
+  computeJitter,
+  type HumanInterruptConfig,
+} from "./resilient-state-lease";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
 export const globalAssociativeNetwork = new AssociativeMemoryNetwork();
 export const globalMemoryJudge = new MemoryEvalJudge();
 export const globalActionStream = new ObservableActionStream();
+export const globalGateManager = new InteractiveGateManager();
+export const globalResearchPlanner = new ScheduleResearchPlanner();
+export const globalIdempotencyEngine = new IdempotencyBackoffEngine();
+export const globalThreadCheckpointer = new SqliteThreadCheckpointer();
+export const globalLeaseManager = new LeaseLockManager();
+export const globalPresenceEngine = new HonestPresenceEngine();
 
 export interface SaanActionResult {
   success: boolean;
@@ -182,6 +198,14 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "generate_proactive_briefing":
     case "parse_dirty_json":
     case "create_action_event":
+    case "request_interactive_approval":
+    case "run_research_planner":
+    case "check_schedule_conflict":
+    case "execute_idempotent_task":
+    case "save_thread_checkpoint":
+    case "get_thread_history":
+    case "acquire_lease_lock":
+    case "check_honest_presence":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1561,6 +1585,216 @@ export function createActionEventAction(
 }
 
 /**
+ * OpenInterpreter Interactive Confirmation Gate
+ */
+export function requestInteractiveApprovalAction(
+  command: string,
+  workingDirectory?: string,
+  securityTier: 1 | 2 | 3 = 2
+): SaanActionResult {
+  try {
+    const card = globalGateManager.createApprovalCard(command, { workingDirectory, securityTier });
+    return {
+      success: true,
+      action: "request_interactive_approval",
+      tier: 1,
+      message: `Created approval card ${card.id} for command: ${command}`,
+      data: card,
+    };
+  } catch (err: any) {
+    return { success: false, action: "request_interactive_approval", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Khoj Multi-Step Research Planner with Mid-Course Interrupts
+ */
+export function runResearchPlannerAction(
+  query: string,
+  mockFindings: string[] = ["Found related documentation and initial facts"],
+  interruptInstruction?: string
+): SaanActionResult {
+  try {
+    const interrupts = interruptInstruction ? [interruptInstruction] : [];
+    const result = globalResearchPlanner.executeResearchLoop(
+      query,
+      (_q, subqueries) => [
+        ...mockFindings,
+        `Insights gathered for subquery: ${subqueries[0] || query}`,
+      ],
+      interrupts
+    );
+    return {
+      success: true,
+      action: "run_research_planner",
+      tier: 1,
+      message: `Executed research loop across ${result.totalIterations} iterations`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "run_research_planner", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Khoj Calendar Schedule Collision Detector
+ */
+export function checkScheduleConflictAction(
+  proposedStartAt: number,
+  durationMs: number = 3600000,
+  existingSlots: ScheduledSlot[] = []
+): SaanActionResult {
+  try {
+    const conflict = globalResearchPlanner.checkScheduleConflict(proposedStartAt, durationMs, existingSlots);
+    return {
+      success: true,
+      action: "check_schedule_conflict",
+      tier: 1,
+      message: conflict.hasConflict ? "Schedule conflict detected with existing events" : "No schedule conflict detected",
+      data: conflict,
+    };
+  } catch (err: any) {
+    return { success: false, action: "check_schedule_conflict", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * n8n Idempotent Task Execution with SHA-256 Fingerprinting
+ */
+export function executeIdempotentTaskAction(
+  userId: string,
+  idempotencyKey: string,
+  payload: unknown,
+  taskResult?: unknown
+): SaanActionResult {
+  try {
+    const check = globalIdempotencyEngine.checkOrAcquire(userId, idempotencyKey, payload);
+    if (check.status === "cached") {
+      return {
+        success: true,
+        action: "execute_idempotent_task",
+        tier: 1,
+        message: `Idempotency hit: Returning cached response for key ${idempotencyKey}`,
+        data: { status: "cached", record: check.record },
+      };
+    }
+    if (check.status === "conflict") {
+      return {
+        success: false,
+        action: "execute_idempotent_task",
+        tier: 1,
+        message: `Idempotency conflict for key ${idempotencyKey}`,
+        data: { status: "conflict" },
+      };
+    }
+    // Finalize execution if result is provided
+    if (taskResult !== undefined) {
+      globalIdempotencyEngine.complete(userId, idempotencyKey, 200, taskResult);
+    }
+    return {
+      success: true,
+      action: "execute_idempotent_task",
+      tier: 1,
+      message: `Acquired lock and executed task for key ${idempotencyKey}`,
+      data: { status: "executed", result: taskResult },
+    };
+  } catch (err: any) {
+    return { success: false, action: "execute_idempotent_task", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * LangGraph Stateful Thread Checkpointer
+ */
+export function saveThreadCheckpointAction(
+  threadId: string,
+  values: Record<string, unknown> = {},
+  parentCheckpointId?: string
+): SaanActionResult {
+  try {
+    const cp = globalThreadCheckpointer.saveCheckpoint(threadId, values, parentCheckpointId);
+    return {
+      success: true,
+      action: "save_thread_checkpoint",
+      tier: 1,
+      message: `Saved state checkpoint ${cp.checkpointId} for thread ${threadId} (step ${cp.step})`,
+      data: cp,
+    };
+  } catch (err: any) {
+    return { success: false, action: "save_thread_checkpoint", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * LangGraph Checkpoint History Traversal
+ */
+export function getThreadHistoryAction(threadId: string): SaanActionResult {
+  try {
+    const history = globalThreadCheckpointer.getHistory(threadId);
+    return {
+      success: true,
+      action: "get_thread_history",
+      tier: 1,
+      message: `Retrieved ${history.length} checkpoints for thread ${threadId}`,
+      data: history,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_thread_history", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Temporal Worker Concurrency Lease Lock
+ */
+export function acquireLeaseLockAction(
+  resource: string,
+  owner: string,
+  ttlMs = 10000
+): SaanActionResult {
+  try {
+    const lease = globalLeaseManager.acquireLease(resource, owner, ttlMs);
+    if (!lease) {
+      return {
+        success: false,
+        action: "acquire_lease_lock",
+        tier: 1,
+        message: `Resource '${resource}' is currently locked by another worker`,
+      };
+    }
+    return {
+      success: true,
+      action: "acquire_lease_lock",
+      tier: 1,
+      message: `Acquired lease lock on '${resource}' for owner '${owner}' until ${new Date(lease.expiresAt).toISOString()}`,
+      data: { resource, owner, expiresAt: lease.expiresAt },
+    };
+  } catch (err: any) {
+    return { success: false, action: "acquire_lease_lock", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Temporal Honest Presence & Offline Gap Detection
+ */
+export function checkHonestPresenceAction(
+  lastHeartbeatMs: number,
+  currentMs: number = Date.now()
+): SaanActionResult {
+  try {
+    const result = globalPresenceEngine.evaluatePresenceGap(lastHeartbeatMs, currentMs);
+    return {
+      success: true,
+      action: "check_honest_presence",
+      tier: 1,
+      message: result.honestAcknowledgement,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "check_honest_presence", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1679,6 +1913,22 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return parseDirtyJsonAction(params.raw);
     case "create_action_event":
       return createActionEventAction(params.toolName, params.actionPayload, params.thought, params.securityRisk);
+    case "request_interactive_approval":
+      return requestInteractiveApprovalAction(params.command, params.workingDirectory, params.securityTier);
+    case "run_research_planner":
+      return runResearchPlannerAction(params.query, params.mockFindings, params.interruptInstruction);
+    case "check_schedule_conflict":
+      return checkScheduleConflictAction(params.proposedStartAt, params.durationMs, params.existingSlots);
+    case "execute_idempotent_task":
+      return executeIdempotentTaskAction(params.userId, params.idempotencyKey, params.payload, params.taskResult);
+    case "save_thread_checkpoint":
+      return saveThreadCheckpointAction(params.threadId, params.values, params.parentCheckpointId);
+    case "get_thread_history":
+      return getThreadHistoryAction(params.threadId);
+    case "acquire_lease_lock":
+      return acquireLeaseLockAction(params.resource, params.owner, params.ttlMs);
+    case "check_honest_presence":
+      return checkHonestPresenceAction(params.lastHeartbeatMs, params.currentMs);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1688,12 +1938,20 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- request_interactive_approval: { "command": "rm -rf build/", "workingDirectory": "/root/k7", "securityTier": 2 }
+- run_research_planner: { "query": "autonomous agents", "interruptInstruction": "focus on state machines" }
+- check_schedule_conflict: { "proposedStartAt": 1730000000000, "durationMs": 3600000, "existingSlots": [] }
+- execute_idempotent_task: { "userId": "user-1", "idempotencyKey": "k-100", "payload": { "amount": 10 } }
+- save_thread_checkpoint: { "threadId": "th-1", "values": { "step": 1, "status": "running" } }
+- get_thread_history: { "threadId": "th-1" }
+- acquire_lease_lock: { "resource": "vault.db", "owner": "worker-1", "ttlMs": 15000 }
+- check_honest_presence: { "lastHeartbeatMs": 1729900000000 }
 - link_memory_to_task: { "taskId": "t-1", "memoryContent": "User likes dark roast coffee", "tags": ["preference"] }
 - query_associated_memories: { "query": "coffee preferences", "k": 5, "alpha": 0.6 }
 - evaluate_memory_verdict: { "question": "Where does user work?", "gold": "Acme Corp", "answer": "User works at Acme Corp", "adversarial": false }

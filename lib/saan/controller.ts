@@ -141,6 +141,27 @@ import {
   type ReasoningParseResult,
   type CitationChip,
 } from "./artifact-reasoning-engine";
+import {
+  VaultBackupEngine,
+  type VaultBackupPackage,
+} from "./vault-backup-engine";
+import {
+  ComposerDraftBus,
+  type ComposerDraft,
+} from "./composer-draft-bus";
+import {
+  DocumentCollector,
+  type IngestedDocument,
+  type DocumentMetadata,
+} from "./document-collector-vault";
+import {
+  MemoryBenchmarkHarness,
+  BiTemporalCalculus,
+  Mem0PromptBuilder,
+  type TemporalEdge,
+  type ProbeRecord,
+  type BenchmarkSummary,
+} from "./memory-benchmark-bitemporal";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
@@ -165,6 +186,12 @@ export const globalCadenceEngine = new CircadianCadenceEngine();
 export const globalWhisperNormalizer = new WhisperAsrNormalizer();
 export const globalPreflightPipeline = new PreflightFilterPipeline();
 export const globalArtifactReasoningEngine = new ArtifactReasoningEngine();
+export const globalVaultBackupEngine = new VaultBackupEngine();
+export const globalComposerDraftBus = new ComposerDraftBus();
+export const globalDocumentCollector = new DocumentCollector();
+export const globalMemoryBenchmark = new MemoryBenchmarkHarness();
+export const globalBiTemporalCalculus = new BiTemporalCalculus();
+export const globalMem0PromptBuilder = new Mem0PromptBuilder();
 
 // Register base system status resource and echo tool on global MCP bridge
 globalMcpBridge.registerResource(
@@ -308,6 +335,11 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "normalize_asr_transcript":
     case "scrub_preflight_prompt":
     case "extract_artifacts_and_reasoning":
+    case "package_vault_backup":
+    case "queue_composer_draft":
+    case "process_vault_document":
+    case "run_memory_benchmark_evaluation":
+    case "evaluate_bitemporal_validity":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -2169,6 +2201,115 @@ export function extractArtifactsAndReasoningAction(content: string): SaanActionR
 }
 
 /**
+ * Chatbox Sovereign Local Vault Backup Packager
+ */
+export function packageVaultBackupAction(input?: any): SaanActionResult {
+  try {
+    const pkg = globalVaultBackupEngine.packageBackup(input || {});
+    const verification = globalVaultBackupEngine.verifyBackup(pkg);
+    return {
+      success: true,
+      action: "package_vault_backup",
+      tier: 1,
+      message: `Packaged vault backup with ${pkg.manifest.stats.memoryCount} memories and ${pkg.manifest.stats.resourceCount} resources (${pkg.manifest.stats.deduplicatedCount} deduplicated)`,
+      data: { package: pkg, verification },
+    };
+  } catch (err: any) {
+    return { success: false, action: "package_vault_backup", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * LobeHub Decoupled Composer Draft Bus & Intent Classifier
+ */
+export function queueComposerDraftAction(
+  text: string,
+  append?: boolean,
+  targetAgentId?: string
+): SaanActionResult {
+  try {
+    const posted = globalComposerDraftBus.postDraft(text, { append, targetAgentId });
+    const classification = globalComposerDraftBus.classifyIntent(text);
+    return {
+      success: true,
+      action: "queue_composer_draft",
+      tier: 1,
+      message: posted ? `Queued draft for composer (classified as: ${classification.intent})` : "Composer not attached",
+      data: { posted, classification, hasPending: globalComposerDraftBus.hasDraft() },
+    };
+  } catch (err: any) {
+    return { success: false, action: "queue_composer_draft", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Anything-LLM Document Ingestion & Semantic Chunking
+ */
+export function processVaultDocumentAction(
+  textContent: string,
+  metadata: any,
+  maxChunkWords?: number
+): SaanActionResult {
+  try {
+    const doc = globalDocumentCollector.processRawText(textContent, metadata || {}, { maxChunkWords });
+    return {
+      success: true,
+      action: "process_vault_document",
+      tier: 1,
+      message: `Processed document "${doc.title}" into ${doc.chunks.length} chunk(s) (${doc.wordCount} words)`,
+      data: doc,
+    };
+  } catch (err: any) {
+    return { success: false, action: "process_vault_document", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Agent-Memory-Bench & Datapace Cognitive Memory Evaluation
+ */
+export function runMemoryBenchmarkEvaluationAction(probes?: ProbeRecord[]): SaanActionResult {
+  try {
+    if (probes && probes.length > 0) {
+      globalMemoryBenchmark.reset();
+      for (const p of probes) {
+        globalMemoryBenchmark.addProbe(p);
+      }
+    }
+    const summary = globalMemoryBenchmark.getSummary();
+    return {
+      success: true,
+      action: "run_memory_benchmark_evaluation",
+      tier: 1,
+      message: `Recall: ${summary.recallPercent}%, Refusal: ${summary.refusedAdversarialPercent}%, Latency p50: ${summary.searchLatencyP50Ms}ms (Sub-10ms target: ${summary.sub10msTargetMet})`,
+      data: summary,
+    };
+  } catch (err: any) {
+    return { success: false, action: "run_memory_benchmark_evaluation", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Graphiti Bi-Temporal Interval Validity Calculus
+ */
+export function evaluateBiTemporalValidityAction(
+  edges: TemporalEdge[],
+  queryTimeMs: number
+): SaanActionResult {
+  try {
+    const validEdges = globalBiTemporalCalculus.queryValidEdges(edges || [], queryTimeMs);
+    return {
+      success: true,
+      action: "evaluate_bitemporal_validity",
+      tier: 1,
+      message: `Evaluated ${edges?.length || 0} edge(s) at timestamp ${queryTimeMs}: ${validEdges.length} valid`,
+      data: { queryTimeMs, totalEdges: edges?.length || 0, validEdges },
+    };
+  } catch (err: any) {
+    return { success: false, action: "evaluate_bitemporal_validity", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -2327,6 +2468,16 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return scrubPreflightPromptAction(params.prompt, params.codeToSanitize);
     case "extract_artifacts_and_reasoning":
       return extractArtifactsAndReasoningAction(params.content);
+    case "package_vault_backup":
+      return packageVaultBackupAction(params.input);
+    case "queue_composer_draft":
+      return queueComposerDraftAction(params.text, params.append, params.targetAgentId);
+    case "process_vault_document":
+      return processVaultDocumentAction(params.textContent, params.metadata, params.maxChunkWords);
+    case "run_memory_benchmark_evaluation":
+      return runMemoryBenchmarkEvaluationAction(params.probes);
+    case "evaluate_bitemporal_validity":
+      return evaluateBiTemporalValidityAction(params.edges, params.queryTimeMs);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -2336,12 +2487,17 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree" | "generate_stealth_headers" | "dispatch_mcp_call" | "process_audio_frame" | "handle_voice_turn_event" | "evaluate_speech_cadence" | "normalize_asr_transcript" | "scrub_preflight_prompt" | "extract_artifacts_and_reasoning",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree" | "generate_stealth_headers" | "dispatch_mcp_call" | "process_audio_frame" | "handle_voice_turn_event" | "evaluate_speech_cadence" | "normalize_asr_transcript" | "scrub_preflight_prompt" | "extract_artifacts_and_reasoning" | "package_vault_backup" | "queue_composer_draft" | "process_vault_document" | "run_memory_benchmark_evaluation" | "evaluate_bitemporal_validity",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- package_vault_backup: { "input": { "memories": [], "tasks": [] } }
+- queue_composer_draft: { "text": "Draft for chat", "append": false }
+- process_vault_document: { "textContent": "Raw document content", "metadata": { "title": "Notes" } }
+- run_memory_benchmark_evaluation: { "probes": [{ "id": "p1", "question": "Where does user live?", "gold": "SF", "answer": "SF", "correct": true, "adversarial": false, "abstained": false, "searchLatencyMs": 3.2 }] }
+- evaluate_bitemporal_validity: { "edges": [{ "id": "e1", "source": "user", "target": "city", "relation": "lives_in", "fact": "Lives in SF", "validAtMs": 1000, "createdAtMs": 1000 }], "queryTimeMs": 1500 }
 - evaluate_speech_cadence: { "text": "Hello user. How can I help you?", "hourOfDay": 22 }
 - normalize_asr_transcript: { "rawTranscript": "[laughter] Haan bilkul theek hai", "lang": "hi" }
 - scrub_preflight_prompt: { "prompt": "Here is my key sk-proj12345678901234567890" }

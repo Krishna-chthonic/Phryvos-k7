@@ -44,6 +44,13 @@ import { evaluateMem0Decision, createMemoryAuditEvent } from "./mem0-decision-ma
 import { getCoreMemoryManager } from "./core-memory-blocks";
 import { getTemporalEdgeGraphStore } from "./temporal-edge-graph";
 import { parseTemporalQueryBounds } from "./temporal-query-engine";
+import { IncrementalSummaryManager, type MessagePayload } from "./incremental-summary";
+import { BufferedMemoryQueue } from "./buffered-memory-queue";
+import { GnosysMemoryPortabilityEngine } from "./portable-memory-spec";
+import { MemobaseProfileManager, type ProfileAttribute } from "./profile-extractor";
+
+// Singleton memory queue for rapid conversational turns
+export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
 
 export interface SaanActionResult {
   success: boolean;
@@ -139,6 +146,11 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "edit_core_memory":
     case "query_temporal_graph":
     case "parse_temporal_query":
+    case "get_running_summary":
+    case "flush_buffered_memories":
+    case "export_gnosys_snapshot":
+    case "import_gnosys_snapshot":
+    case "get_budgeted_profile":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1226,6 +1238,136 @@ export function parseTemporalQueryAction(query: string): SaanActionResult {
 }
 
 /**
+ * LangMem / MemGPT Incremental Running Summary Evaluation
+ */
+export function getRunningSummaryAction(messages: MessagePayload[] = [], maxContextTokens = 8192): SaanActionResult {
+  try {
+    const mgr = new IncrementalSummaryManager({ maxContextTokens });
+    const evaluation = mgr.evaluateContextPressure(messages);
+    return {
+      success: true,
+      action: "get_running_summary",
+      tier: 1,
+      message: evaluation.shouldWarn
+        ? `Memory pressure alert active (${evaluation.currentTokens}/${maxContextTokens} tokens)`
+        : `Memory pressure normal (${evaluation.currentTokens}/${maxContextTokens} tokens)`,
+      data: evaluation,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_running_summary", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * TeleMem Buffered Memory Queue Flush & Clustering
+ */
+export function flushBufferedMemoriesAction(userId: string = "default_user"): SaanActionResult {
+  try {
+    const result = globalBufferedMemoryQueue.flush(userId);
+    return {
+      success: true,
+      action: "flush_buffered_memories",
+      tier: 1,
+      message: `Flushed ${result.fused.originalCount} buffered items into ${result.added.length} distinct memories (${result.fused.clusterCount} fused)`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "flush_buffered_memories", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Gnosys Sovereign Memory Snapshot Export
+ */
+export function exportGnosysSnapshotAction(agentId = "saan-k7"): SaanActionResult {
+  try {
+    const coreMgr = getCoreMemoryManager();
+    const personaContent = coreMgr.getBlock("persona")?.content || "";
+    const humanContent = coreMgr.getBlock("human")?.content || "";
+    const graphStore = getTemporalEdgeGraphStore();
+    const edges = graphStore.getAllEdges();
+
+    const snapshot = GnosysMemoryPortabilityEngine.exportSnapshot({
+      agentId,
+      coreMemory: {
+        persona: personaContent,
+        human: humanContent,
+      },
+      facts: [],
+      edges: edges.map((e) => ({
+        source: e.sourceNode,
+        target: e.targetNode,
+        relationship: e.relation,
+        weight: 1.0,
+        validAt: new Date(e.validAt).toISOString(),
+        invalidAt: e.invalidAt ? new Date(e.invalidAt).toISOString() : undefined,
+      })),
+      metadata: { exportedFrom: "k7-saan-sovereign-core" },
+    });
+
+    return {
+      success: true,
+      action: "export_gnosys_snapshot",
+      tier: 1,
+      message: `Exported Gnosys snapshot (v${snapshot.version}) with SHA-256: ${snapshot.checksum?.slice(0, 16)}...`,
+      data: snapshot,
+    };
+  } catch (err: any) {
+    return { success: false, action: "export_gnosys_snapshot", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Gnosys Sovereign Memory Snapshot Import & Validation
+ */
+export function importGnosysSnapshotAction(snapshotJson: any): SaanActionResult {
+  try {
+    const validation = GnosysMemoryPortabilityEngine.validateAndImport(snapshotJson);
+    if (!validation.valid) {
+      return {
+        success: false,
+        action: "import_gnosys_snapshot",
+        tier: 1,
+        message: `Gnosys snapshot invalid: ${validation.error}`,
+        data: validation,
+      };
+    }
+
+    return {
+      success: true,
+      action: "import_gnosys_snapshot",
+      tier: 1,
+      message: `Validated Gnosys snapshot with ${validation.factCount} facts and ${validation.edgeCount} edges`,
+      data: validation,
+    };
+  } catch (err: any) {
+    return { success: false, action: "import_gnosys_snapshot", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Memobase Topic-Constrained Profile Budgeting
+ */
+export function getBudgetedProfileAction(profiles: ProfileAttribute[] = [], maxTokens = 500, preferTopics: string[] = []): SaanActionResult {
+  try {
+    const budgeted = MemobaseProfileManager.truncateProfiles(profiles, {
+      maxTokenSize: maxTokens,
+      preferTopics,
+      maxSubtopicSize: 3,
+    });
+    return {
+      success: true,
+      action: "get_budgeted_profile",
+      tier: 1,
+      message: `Profile budgeted to ${budgeted.length} attributes within token ceiling`,
+      data: budgeted,
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_budgeted_profile", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1320,6 +1462,16 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return queryTemporalGraphAction(params.nodeName, params.asOfTimestamp);
     case "parse_temporal_query":
       return parseTemporalQueryAction(params.query);
+    case "get_running_summary":
+      return getRunningSummaryAction(params.messages, params.maxContextTokens);
+    case "flush_buffered_memories":
+      return flushBufferedMemoriesAction(params.userId);
+    case "export_gnosys_snapshot":
+      return exportGnosysSnapshotAction(params.agentId);
+    case "import_gnosys_snapshot":
+      return importGnosysSnapshotAction(params.snapshotJson);
+    case "get_budgeted_profile":
+      return getBudgetedProfileAction(params.profiles, params.maxTokens, params.preferTopics);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1329,12 +1481,17 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- get_running_summary: { "messages": [...], "maxContextTokens": 8192 }
+- flush_buffered_memories: { "userId": "default_user" }
+- export_gnosys_snapshot: { "agentId": "saan-k7" }
+- import_gnosys_snapshot: { "snapshotJson": { ... } }
+- get_budgeted_profile: { "profiles": [...], "maxTokens": 500, "preferTopics": ["basic_info"] }
 - apply_mem0_decision: { "candidate": { "text": "I moved to Seattle", "category": "preference", "sourceRole": "user" }, "existingMemories": [] }
 - edit_core_memory: { "operation": "append" | "replace", "block": "human" | "persona", "content": "new text", "oldContent": "to replace" }
 - query_temporal_graph: { "nodeName": "Seattle", "asOfTimestamp": 1729000000000 }

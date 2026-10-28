@@ -122,6 +122,25 @@ import {
   UtteranceNormalizer,
   type VoiceTurnEvent,
 } from "./voice-turntaking-fsm";
+import {
+  CircadianCadenceEngine,
+  KokoroTextSplitter,
+  type CadenceSettings,
+} from "./kokoro-cadence-pacing";
+import {
+  WhisperAsrNormalizer,
+  type AsrDecodingConfig,
+} from "./whisper-asr-normalizer";
+import {
+  PreflightFilterPipeline,
+  type RedactionResult,
+} from "./preflight-filter-pipeline";
+import {
+  ArtifactReasoningEngine,
+  type ParsedArtifact,
+  type ReasoningParseResult,
+  type CitationChip,
+} from "./artifact-reasoning-engine";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
@@ -142,6 +161,10 @@ export const globalStealthGenerator = new StealthHeaderGenerator();
 export const globalMcpBridge = new McpJsonRpcBridge();
 export const globalAudioPipeline = new PipecatFramePipeline();
 export const globalVoiceFSM = new VoiceTurnTakingFSM();
+export const globalCadenceEngine = new CircadianCadenceEngine();
+export const globalWhisperNormalizer = new WhisperAsrNormalizer();
+export const globalPreflightPipeline = new PreflightFilterPipeline();
+export const globalArtifactReasoningEngine = new ArtifactReasoningEngine();
 
 // Register base system status resource and echo tool on global MCP bridge
 globalMcpBridge.registerResource(
@@ -281,6 +304,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "dispatch_mcp_call":
     case "process_audio_frame":
     case "handle_voice_turn_event":
+    case "evaluate_speech_cadence":
+    case "normalize_asr_transcript":
+    case "scrub_preflight_prompt":
+    case "extract_artifacts_and_reasoning":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -2058,6 +2085,90 @@ export function handleVoiceTurnEventAction(
 }
 
 /**
+ * Kokoro Circadian Cadence & Speech Pacing
+ */
+export function evaluateSpeechCadenceAction(text: string, hourOfDay?: number): SaanActionResult {
+  try {
+    const result = globalCadenceEngine.paceText(text, hourOfDay);
+    return {
+      success: true,
+      action: "evaluate_speech_cadence",
+      tier: 1,
+      message: `Paced ${result.sentenceCount} sentence(s) with ${result.settings.tone} tone (${result.settings.speed}x speed)`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "evaluate_speech_cadence", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Whisper Multilingual ASR Normalizer & Decoding Fallback
+ */
+export function normalizeAsrTranscriptAction(
+  rawTranscript: string,
+  lang?: string,
+  userPrompt?: string
+): SaanActionResult {
+  try {
+    const normalized = globalWhisperNormalizer.normalize(rawTranscript);
+    const decodingConfig = globalWhisperNormalizer.getDecodingConfig(lang, userPrompt);
+    return {
+      success: true,
+      action: "normalize_asr_transcript",
+      tier: 1,
+      message: `Normalized ASR transcript for language "${decodingConfig.language}"`,
+      data: { normalizedTranscript: normalized, decodingConfig },
+    };
+  } catch (err: any) {
+    return { success: false, action: "normalize_asr_transcript", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Open-WebUI Preflight Filter & Credential Scrubbing
+ */
+export function scrubPreflightPromptAction(prompt: string, codeToSanitize?: string): SaanActionResult {
+  try {
+    const scrubbed = globalPreflightPipeline.scrubCredentials(prompt);
+    let sanitizedCode: string | undefined = undefined;
+    if (codeToSanitize) {
+      sanitizedCode = globalPreflightPipeline.sanitizeCode(codeToSanitize);
+    }
+    return {
+      success: true,
+      action: "scrub_preflight_prompt",
+      tier: 1,
+      message: `Scrubbed ${scrubbed.redactedCount} sensitive credential(s) from prompt`,
+      data: { ...scrubbed, sanitizedCode },
+    };
+  } catch (err: any) {
+    return { success: false, action: "scrub_preflight_prompt", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * LibreChat Artifacts & HuggingFace Chat-UI Reasoning Parser
+ */
+export function extractArtifactsAndReasoningAction(content: string): SaanActionResult {
+  try {
+    const reasoning = globalArtifactReasoningEngine.extractReasoning(content);
+    const artifacts = globalArtifactReasoningEngine.extractArtifacts(content);
+    const citations = globalArtifactReasoningEngine.extractCitations(content);
+
+    return {
+      success: true,
+      action: "extract_artifacts_and_reasoning",
+      tier: 1,
+      message: `Extracted ${artifacts.length} artifact(s), ${citations.length} citation(s), reasoning present: ${reasoning.hasReasoning}`,
+      data: { reasoning, artifacts, citations },
+    };
+  } catch (err: any) {
+    return { success: false, action: "extract_artifacts_and_reasoning", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -2208,6 +2319,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return processAudioFrameAction(params.audioBytesBase64, params.sampleRate, params.channels, params.interrupt);
     case "handle_voice_turn_event":
       return handleVoiceTurnEventAction(params.event, params.spokenInput);
+    case "evaluate_speech_cadence":
+      return evaluateSpeechCadenceAction(params.text, params.hourOfDay);
+    case "normalize_asr_transcript":
+      return normalizeAsrTranscriptAction(params.rawTranscript, params.lang, params.userPrompt);
+    case "scrub_preflight_prompt":
+      return scrubPreflightPromptAction(params.prompt, params.codeToSanitize);
+    case "extract_artifacts_and_reasoning":
+      return extractArtifactsAndReasoningAction(params.content);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -2217,12 +2336,16 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree" | "generate_stealth_headers" | "dispatch_mcp_call" | "process_audio_frame" | "handle_voice_turn_event",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree" | "generate_stealth_headers" | "dispatch_mcp_call" | "process_audio_frame" | "handle_voice_turn_event" | "evaluate_speech_cadence" | "normalize_asr_transcript" | "scrub_preflight_prompt" | "extract_artifacts_and_reasoning",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- evaluate_speech_cadence: { "text": "Hello user. How can I help you?", "hourOfDay": 22 }
+- normalize_asr_transcript: { "rawTranscript": "[laughter] Haan bilkul theek hai", "lang": "hi" }
+- scrub_preflight_prompt: { "prompt": "Here is my key sk-proj12345678901234567890" }
+- extract_artifacts_and_reasoning: { "content": "<think>Planning...</think>Hello" }
 - generate_stealth_headers: { "preset": "desktop-chrome-linux" | "mobile-pixel-android" }
 - dispatch_mcp_call: { "message": { "jsonrpc": "2.0", "id": 1, "method": "tools/list" } }
 - process_audio_frame: { "sampleRate": 16000, "channels": 1, "interrupt": false }

@@ -36,6 +36,7 @@ import { insertPromptsAtDepth } from "@/lib/saan/depth-injector";
 import { getAuthorsNoteInjection } from "@/lib/saan/authors-note";
 import { mergeConsecutiveRoles } from "@/lib/saan/prompt-merger";
 import { applyRegexPipeline } from "@/lib/saan/regex-pipeline";
+import { pruneContextTurns, clampOutputTokens } from "@/lib/saan/token-budget";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -140,6 +141,11 @@ export async function POST(req: NextRequest) {
     // SillyTavern Consecutive Role Merge Engine (strict turn alternation)
     messages = mergeConsecutiveRoles(messages);
 
+    // RisuAI Dynamic Token Headroom & Context Budget Clamping
+    const { prunedMessages, budget: tokenBudget } = pruneContextTurns(messages, 8192, 500);
+    messages = prunedMessages;
+    const clampedMaxTokens = tokenBudget.outputTokens;
+
     let reply = "";
 
     // A. Custom Vault Provider attempt (if vault is unlocked)
@@ -179,7 +185,7 @@ export async function POST(req: NextRequest) {
             model: "openai",
             messages,
             temperature: 0.88,
-            max_tokens: 500,
+            max_tokens: clampedMaxTokens,
           }),
           signal: controller.signal,
         });

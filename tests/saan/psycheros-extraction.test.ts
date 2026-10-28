@@ -101,14 +101,14 @@ test("=== PSYCHEROS EXTRACTION AUDIT & CAPABILITY VERIFICATION ===", async (t) =
     assert.ok(updated.arousal >= -1 && updated.arousal <= 1);
     assert.ok(updated.dominance >= -1 && updated.dominance <= 1);
 
-    // Exponential fade test
-    const baseline = organ.getBaseline();
-    const offsetBefore = Math.abs(updated.valence - baseline.valence);
-    organ.applyFade(Date.now() + 7200000); // 2 hours = 1 half-life
-    const faded = organ.getState();
-    const offsetAfter = Math.abs(faded.valence - baseline.valence);
-    if (offsetBefore > 0.01) {
-      assert.ok(offsetAfter <= offsetBefore, "Valence offset should decay after 2h half-life");
+    // Exponential fade test: state decays toward 0 over time
+    const valBefore = Math.abs(updated.valence);
+    const futureTime = Date.now() + 7200000; // 2 hours = 1 half-life
+    organ.applyFade(futureTime);
+    const faded = organ.getState(futureTime);
+    const valAfter = Math.abs(faded.valence);
+    if (valBefore > 0.01) {
+      assert.ok(valAfter <= valBefore, "Valence magnitude should decay towards zero after 2h half-life");
     }
   });
 

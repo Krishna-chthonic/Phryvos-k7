@@ -37,6 +37,9 @@ import { evaluateLorebook, type LoreEntry } from "./lorebook";
 import { substituteMacros } from "./macro-engine";
 import { getAuthorsNoteInjection, DEFAULT_AUTHORS_NOTE } from "./authors-note";
 import { globalChatVariables } from "./chat-variables";
+import { clampOutputTokens, pruneContextTurns } from "./token-budget";
+import { getGraphMemoryStore } from "./graph-memory";
+import { ProviderCascadeEngine } from "./provider-cascade";
 
 export interface SaanActionResult {
   success: boolean;
@@ -125,6 +128,9 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_authors_note":
     case "get_chat_variable":
     case "set_chat_variable":
+    case "get_token_budget":
+    case "query_graph_memory":
+    case "test_provider_cascade":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1049,6 +1055,83 @@ export function setChatVariableAction(key: string, value: any): SaanActionResult
 }
 
 /**
+ * Calculates token budget and dynamic headroom clamping (RisuAI pattern)
+ */
+export function getTokenBudgetAction(
+  inputTokens = 1000,
+  maxContext = 8192,
+  maxResponse = 2048
+): SaanActionResult {
+  try {
+    const clampedOutput = clampOutputTokens(inputTokens, maxContext, maxResponse);
+    const headroom = Math.max(0, maxContext - inputTokens - clampedOutput);
+    return {
+      success: true,
+      action: "get_token_budget",
+      tier: 1,
+      message: `Calculated token budget: input=${inputTokens}, output=${clampedOutput}, headroom=${headroom}`,
+      data: { inputTokens, outputTokens: clampedOutput, maxContext, headroom },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_token_budget", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Queries associative entity graph memory (RisuAI GraphMem pattern)
+ */
+export function queryGraphMemoryAction(query = "", searchDepth = 2): SaanActionResult {
+  try {
+    const store = getGraphMemoryStore();
+    const result = store.search(query, searchDepth);
+    return {
+      success: true,
+      action: "query_graph_memory",
+      tier: 1,
+      message: `Found ${result.matchedNodes.length} graph memory nodes for query "${query}"`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "query_graph_memory", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Tests provider cascade fallback chain (RisuAI pattern)
+ */
+export async function testProviderCascadeAction(
+  primaryModel = "primary-model",
+  fallbackModels: string[] = ["fallback-model-1", "fallback-model-2"]
+): Promise<SaanActionResult> {
+  try {
+    const engine = new ProviderCascadeEngine({
+      primaryModel,
+      fallbackModels,
+      maxRetriesPerModel: 1,
+      fallbackOnBlankResponse: true,
+    });
+
+    // Test simulation dispatch
+    const result = await engine.execute(async (model) => {
+      if (model === primaryModel) {
+        return { text: "" }; // simulate blank output from primary to trigger fallback
+      }
+      return { text: `Success response from fallback ${model}` };
+    });
+
+    return {
+      success: result.success,
+      action: "test_provider_cascade",
+      tier: 1,
+      message: `Provider cascade executed. Used model: ${result.modelUsed}, fallbackTriggered: ${result.fallbackTriggered}`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "test_provider_cascade", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1129,6 +1212,12 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return getChatVariableAction(params.key);
     case "set_chat_variable":
       return setChatVariableAction(params.key, params.value);
+    case "get_token_budget":
+      return getTokenBudgetAction(params.inputTokens, params.maxContext, params.maxResponse);
+    case "query_graph_memory":
+      return queryGraphMemoryAction(params.query, params.searchDepth);
+    case "test_provider_cascade":
+      return testProviderCascadeAction(params.primaryModel, params.fallbackModels);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1138,12 +1227,15 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- get_token_budget: { "inputTokens": 1000, "maxContext": 8192, "maxResponse": 2048 }
+- query_graph_memory: { "query": "technology", "searchDepth": 2 }
+- test_provider_cascade: { "primaryModel": "model-a", "fallbackModels": ["model-b"] }
 - create_task: { "title": "Task title", "description": "optional", "priority": 1-3, "dueDate": "YYYY-MM-DD" }
 - list_tasks: { "status": "todo" | "done" }
 - complete_task: { "taskId": 123 }

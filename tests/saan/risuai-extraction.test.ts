@@ -14,7 +14,8 @@ import assert from "node:assert/strict";
 import { ProviderCascadeEngine } from "../../lib/saan/provider-cascade";
 import { clampOutputTokens, pruneContextTurns, estimateTokenCount } from "../../lib/saan/token-budget";
 import { TaskRateLimiter } from "../../lib/saan/task-rate-limiter";
-import { GraphMemoryStore } from "../../lib/saan/graph-memory";
+import { GraphMemoryStore, DEFAULT_SAAN_GRAPH_NODES, getGraphMemoryStore, searchGlobalGraph } from "../../lib/saan/graph-memory";
+import { globalChatVariables } from "../../lib/saan/chat-variables";
 import { encryptSessionPayload, decryptSessionPayload } from "../../lib/saan/session-crypto";
 import { dispatchSaanAction } from "../../lib/saan/controller";
 
@@ -225,4 +226,40 @@ test("RisuAI Extraction: Controller Action Dispatching", async () => {
   assert.equal(resCascade.success, true);
   assert.equal(resCascade.tier, 1);
   assert.equal(resCascade.data.fallbackTriggered, true);
+});
+
+test("RisuAI Extraction: DEFAULT_SAAN_GRAPH_NODES & Global Search", () => {
+  assert.ok(DEFAULT_SAAN_GRAPH_NODES.length >= 6, "Must define at least 6 default Saan knowledge nodes");
+  const store = getGraphMemoryStore();
+  const allNodes = store.getAllNodes();
+  assert.ok(allNodes.some((n) => n.name === "Krishna"));
+  assert.ok(allNodes.some((n) => n.name === "Phryvos"));
+  assert.ok(allNodes.some((n) => n.name === "Masala Chai"));
+
+  // 1-hop search on Krishna should retrieve Krishna and its direct connections
+  const searchResult = searchGlobalGraph("Krishna", 1);
+  const matchedNames = searchResult.matchedNodes.map((n) => n.name);
+  assert.ok(matchedNames.includes("Krishna"));
+  assert.ok(matchedNames.includes("Phryvos"));
+  assert.ok(matchedNames.includes("Masala Chai"));
+});
+
+test("RisuAI Extraction: Chat Variable Store Defaults & Dynamic Mutations", () => {
+  const vars = globalChatVariables.getAll();
+  assert.equal(vars.user, "Krishna");
+  assert.equal(vars.char, "Saan");
+
+  // Dynamic increment
+  const startChai = Number(globalChatVariables.get("chai_count", 0));
+  const nextChai = globalChatVariables.add("chai_count", 1);
+  assert.equal(nextChai, startChai + 1);
+
+  // Dynamic boolean toggle
+  const prevFocus = Boolean(globalChatVariables.get("deep_focus_mode", false));
+  const toggledFocus = globalChatVariables.toggle("deep_focus_mode");
+  assert.equal(toggledFocus, !prevFocus);
+
+  // Custom set
+  globalChatVariables.set("custom_affinity_chip", "infinite_resonance");
+  assert.equal(globalChatVariables.get("custom_affinity_chip"), "infinite_resonance");
 });

@@ -48,6 +48,13 @@ import { getAuthorsNoteInjection } from "@/lib/saan/authors-note";
 import { mergeConsecutiveRoles } from "@/lib/saan/prompt-merger";
 import { applyRegexPipeline } from "@/lib/saan/regex-pipeline";
 import { pruneContextTurns, clampOutputTokens } from "@/lib/saan/token-budget";
+import {
+  getGraphMemoryStore,
+  searchGlobalGraph,
+  DEFAULT_SAAN_GRAPH_NODES,
+  type GraphNode,
+} from "@/lib/saan/graph-memory";
+import { globalChatVariables } from "@/lib/saan/chat-variables";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -90,6 +97,32 @@ export async function POST(req: NextRequest) {
         message: `Loaded character card '${parsed.data.name}' successfully!`,
         card: parsed,
       });
+    }
+
+    // RisuAI Chat Variables Management
+    if (body.type === "get_chat_variables") {
+      return NextResponse.json({ ok: true, variables: globalChatVariables.getAll() });
+    }
+    if (body.type === "set_chat_variable" && body.key) {
+      globalChatVariables.set(body.key, body.value);
+      return NextResponse.json({ ok: true, variables: globalChatVariables.getAll() });
+    }
+    if (body.type === "increment_chat_variable" && body.key) {
+      const next = globalChatVariables.add(body.key, body.delta ?? 1);
+      return NextResponse.json({ ok: true, key: body.key, value: next, variables: globalChatVariables.getAll() });
+    }
+    if (body.type === "toggle_chat_variable" && body.key) {
+      const next = globalChatVariables.toggle(body.key);
+      return NextResponse.json({ ok: true, key: body.key, value: next, variables: globalChatVariables.getAll() });
+    }
+
+    // RisuAI Graph Associative Memory Management
+    if (body.type === "get_graph_nodes") {
+      return NextResponse.json({ ok: true, nodes: getGraphMemoryStore().getAllNodes() });
+    }
+    if (body.type === "query_graph_memory") {
+      const searchResult = searchGlobalGraph(body.query || "", body.depth || 1);
+      return NextResponse.json({ ok: true, result: searchResult });
     }
 
     const rawUserMessage = body.message;
@@ -171,6 +204,12 @@ export async function POST(req: NextRequest) {
     // Airi temporal anchor prefix for user turns
     const timeStampedUserMessage = `${formatTimePrefix()}${spokenNarrative}`;
 
+    // RisuAI Chat Variables Auto-Increment & Session Sync
+    globalChatVariables.add("turn_count", 1);
+
+    // RisuAI Graph Associative Memory Search (BFS 1-hop traversal)
+    const graphResult = searchGlobalGraph(rawUserMessage, 1);
+
     let messages = [
       { role: "system" as const, content: systemPrompt },
       ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
@@ -186,6 +225,19 @@ export async function POST(req: NextRequest) {
         role: "system" as const,
         depth: 2,
         order: 90,
+      });
+    }
+
+    if (graphResult.matchedNodes.length > 0) {
+      const graphSummary = graphResult.matchedNodes
+        .map((node) => `• ${node.name}: ${node.summary} (Connected: ${node.connections.join(", ")})`)
+        .join("\n");
+      depthInjections.push({
+        id: "graph_memory_associative",
+        content: `[ASSOCIATIVE KNOWLEDGE GRAPH CONTEXT]:\n${graphSummary}`,
+        role: "system" as const,
+        depth: 1,
+        order: 85,
       });
     }
 
@@ -207,6 +259,8 @@ export async function POST(req: NextRequest) {
     const clampedMaxTokens = tokenBudget.outputTokens;
 
     let reply = "";
+    let providerUsed = "Vault Provider";
+    let fallbackTriggered = false;
 
     // A. Custom Vault Provider attempt (if vault is unlocked)
     try {
@@ -223,6 +277,8 @@ export async function POST(req: NextRequest) {
         );
         if (res.text && res.text.trim()) {
           reply = res.text.trim();
+          providerUsed = def.name || "Vault Provider";
+          fallbackTriggered = false;
         }
       }
     } catch {
@@ -254,6 +310,10 @@ export async function POST(req: NextRequest) {
         if (resp.ok) {
           const data = await resp.json();
           reply = data.choices?.[0]?.message?.content?.trim() || "";
+          if (reply) {
+            providerUsed = "Frontier Cascade (OpenAI)";
+            fallbackTriggered = true;
+          }
         }
       } catch (e) {
         // Fallback to text endpoint
@@ -286,6 +346,8 @@ export async function POST(req: NextRequest) {
           const text = await resp.text();
           if (text && !text.includes("Free limit reached")) {
             reply = text.trim();
+            providerUsed = "Fast Frontier Fallback";
+            fallbackTriggered = true;
           }
         }
       } catch (e) {}
@@ -297,6 +359,8 @@ export async function POST(req: NextRequest) {
       reply = p.isSleeping
         ? "Hmm... neend me hoon yaar. Kal subah baat karte hain na, so ja!"
         : `Hey... main abhi ${p.activity.toLowerCase()} kar rahi thi aur connection thoda atak gaya. Kya bol rahe the?`;
+      providerUsed = "Sovereign Organic Fallback";
+      fallbackTriggered = true;
     }
 
     // 4. Check for Action Blocks (`saan_action`) in the reply using DirtyJson (Agent Zero pattern)
@@ -380,6 +444,14 @@ export async function POST(req: NextRequest) {
       plans,
       controls: streamingControls.controls,
       lorebookActivated: lorebookResult.activatedEntries.map((e) => e.id),
+      tokenBudget,
+      providerTelemetry: {
+        providerUsed,
+        fallbackTriggered,
+        clampedMaxTokens,
+      },
+      graphAssociations: graphResult.matchedNodes.map((n) => n.name),
+      chatVariables: globalChatVariables.getAll(),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

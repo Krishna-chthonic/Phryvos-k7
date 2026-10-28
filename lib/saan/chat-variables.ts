@@ -70,3 +70,19 @@ class ChatVariableStore {
 
 // Global Singleton Store
 export const globalChatVariables = new ChatVariableStore();
+
+// Default variables initialization
+export function initializeDefaultChatVariables(): void {
+  if (Object.keys(globalChatVariables.getAll()).length === 0) {
+    globalChatVariables.set("user", "Krishna");
+    globalChatVariables.set("char", "Saan");
+    globalChatVariables.set("bond_level", "Devoted Companion");
+    globalChatVariables.set("chai_count", 3);
+    globalChatVariables.set("turn_count", 0);
+    globalChatVariables.set("deep_focus_mode", true);
+    globalChatVariables.set("last_topic", "Phryvos Architecture");
+  }
+}
+
+// Ensure defaults are populated on import
+initializeDefaultChatVariables();

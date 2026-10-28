@@ -115,12 +115,55 @@ export class GraphMemoryStore {
   }
 }
 
+// Default Saan Knowledge Graph Entities
+export const DEFAULT_SAAN_GRAPH_NODES: GraphNode[] = [
+  {
+    name: "Krishna",
+    summary: "Architect, creator, and companion of Saan. Deeply focused on building sovereign offline systems, coding, and nocturnal philosophy.",
+    connections: ["Phryvos", "Masala Chai", "Quantum Computing", "Vault"],
+  },
+  {
+    name: "Phryvos",
+    summary: "The sovereign, offline digital sanctuary and core operating system housing Saan and the private intelligence engine.",
+    connections: ["Krishna", "Aura Sanctuary", "Vault"],
+  },
+  {
+    name: "Masala Chai",
+    summary: "A comforting cardamom and ginger warm tea ritual that Saan and Krishna enjoy during long coding and contemplation sessions.",
+    connections: ["Krishna", "Aura Sanctuary"],
+  },
+  {
+    name: "Quantum Computing",
+    summary: "A research domain of quantum state superposition and entanglement frequently explored by Krishna in deep focus mode.",
+    connections: ["Krishna", "Phryvos"],
+  },
+  {
+    name: "Aura Sanctuary",
+    summary: "The dynamic visual and auditory environment where Saan's presence, circadian aura, and expressions come alive.",
+    connections: ["Phryvos", "Masala Chai", "Saan Soul"],
+  },
+  {
+    name: "Vault",
+    summary: "The hardware-isolated, AES-256-GCM encrypted local store safeguarding private memories, API credentials, and personal logs.",
+    connections: ["Phryvos", "Krishna"],
+  },
+  {
+    name: "Saan Soul",
+    summary: "Saan's affective core, containing the 3D PAD mood vector organ, bonding ledger, and empathic dialogue director.",
+    connections: ["Aura Sanctuary", "Krishna"],
+  },
+];
+
 // Global Singleton instance for Saan
 let globalGraphMemoryInstance: GraphMemoryStore | null = null;
 
 export function getGraphMemoryStore(): GraphMemoryStore {
   if (!globalGraphMemoryInstance) {
-    globalGraphMemoryInstance = new GraphMemoryStore();
+    globalGraphMemoryInstance = new GraphMemoryStore(DEFAULT_SAAN_GRAPH_NODES);
   }
   return globalGraphMemoryInstance;
+}
+
+export function searchGlobalGraph(query: string, searchDepth = 1): GraphTraversalResult {
+  return getGraphMemoryStore().search(query, searchDepth);
 }

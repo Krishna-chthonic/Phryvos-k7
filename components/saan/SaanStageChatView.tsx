@@ -20,6 +20,12 @@ import {
   Sun,
   Download,
   Upload,
+  Network,
+  ShieldCheck,
+  Plus,
+  X,
+  Search,
+  Database,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
@@ -82,6 +88,27 @@ export function SaanStageChatView({
   const [audioLevel, setAudioLevel] = React.useState<number>(0);
   const [ttfaMs, setTtfaMs] = React.useState<number | null>(null);
 
+  // RisuAI Telemetry & State Inspectors
+  const [tokenBudget, setTokenBudget] = React.useState<{
+    inputTokens: number;
+    outputTokens: number;
+    maxContextTokens: number;
+    headroomTokens: number;
+    wasPruned: boolean;
+  } | null>(null);
+  const [providerTelemetry, setProviderTelemetry] = React.useState<{
+    providerUsed: string;
+    fallbackTriggered: boolean;
+  }>({ providerUsed: "Vault Provider", fallbackTriggered: false });
+  const [isVariablesOpen, setIsVariablesOpen] = React.useState(false);
+  const [chatVariables, setChatVariables] = React.useState<Record<string, any>>({});
+  const [newVarKey, setNewVarKey] = React.useState("");
+  const [newVarVal, setNewVarVal] = React.useState("");
+  const [isGraphOpen, setIsGraphOpen] = React.useState(false);
+  const [graphNodes, setGraphNodes] = React.useState<any[]>([]);
+  const [graphQuery, setGraphQuery] = React.useState("");
+  const [graphSearchResults, setGraphSearchResults] = React.useState<any[]>([]);
+
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -108,6 +135,32 @@ export function SaanStageChatView({
         reaction: "✨",
       },
     ]);
+
+    // Initial RisuAI Variables & Graph Fetch
+    fetch("/api/saan/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "get_chat_variables" }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && d.variables) setChatVariables(d.variables);
+      })
+      .catch(() => {});
+
+    fetch("/api/saan/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "get_graph_nodes" }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && d.nodes) {
+          setGraphNodes(d.nodes);
+          setGraphSearchResults(d.nodes);
+        }
+      })
+      .catch(() => {});
   }, []);
 
   // Persist history
@@ -373,6 +426,17 @@ export function SaanStageChatView({
           reasoning,
         };
 
+        // Update RisuAI Telemetry & Variables
+        if (data.tokenBudget) {
+          setTokenBudget(data.tokenBudget);
+        }
+        if (data.providerTelemetry) {
+          setProviderTelemetry(data.providerTelemetry);
+        }
+        if (data.chatVariables) {
+          setChatVariables(data.chatVariables);
+        }
+
         setMessages((prev) => [...prev, newMsg]);
 
         if (voiceEnabled) {
@@ -599,6 +663,80 @@ export function SaanStageChatView({
     }
   };
 
+  // RisuAI Chat Variables Handlers
+  const handleIncrementVariable = async (key: string, delta = 1) => {
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "increment_chat_variable", key, delta }),
+      });
+      const data = await res.json();
+      if (data.ok && data.variables) {
+        setChatVariables(data.variables);
+      }
+    } catch (e) {
+      console.error("Failed to increment variable:", e);
+    }
+  };
+
+  const handleToggleVariable = async (key: string) => {
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "toggle_chat_variable", key }),
+      });
+      const data = await res.json();
+      if (data.ok && data.variables) {
+        setChatVariables(data.variables);
+      }
+    } catch (e) {
+      console.error("Failed to toggle variable:", e);
+    }
+  };
+
+  const handleSetVariable = async (key: string, value: any) => {
+    if (!key.trim()) return;
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "set_chat_variable", key, value }),
+      });
+      const data = await res.json();
+      if (data.ok && data.variables) {
+        setChatVariables(data.variables);
+        setNewVarKey("");
+        setNewVarVal("");
+      }
+    } catch (e) {
+      console.error("Failed to set variable:", e);
+    }
+  };
+
+  // RisuAI Graph Associative Memory Search Handler
+  const handleSearchGraph = async (query: string) => {
+    setGraphQuery(query);
+    if (!query.trim()) {
+      setGraphSearchResults(graphNodes);
+      return;
+    }
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "query_graph_memory", query, depth: 2 }),
+      });
+      const data = await res.json();
+      if (data.ok && data.result?.matchedNodes) {
+        setGraphSearchResults(data.result.matchedNodes);
+      }
+    } catch (e) {
+      console.error("Failed to search graph:", e);
+    }
+  };
+
   // STT Toggle with Airi Audio Level VU simulation
   const toggleListening = () => {
     if (typeof window === "undefined") return;
@@ -800,6 +938,80 @@ export function SaanStageChatView({
               >
                 <Upload className="w-3 h-3 text-indigo-400" />
                 <span>Import Card</span>
+              </button>
+
+              {/* RisuAI: Live Token Budget Gauge */}
+              {tokenBudget ? (
+                <div
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium border transition ${
+                    tokenBudget.inputTokens / tokenBudget.maxContextTokens > 0.85
+                      ? "bg-rose-500/15 text-rose-300 border-rose-500/40 animate-pulse"
+                      : tokenBudget.inputTokens / tokenBudget.maxContextTokens > 0.6
+                      ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                      : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                  }`}
+                  title={`Context Budget: ${tokenBudget.inputTokens} / ${tokenBudget.maxContextTokens} tok (${Math.round(
+                    (tokenBudget.inputTokens / tokenBudget.maxContextTokens) * 100
+                  )}%)\nRemaining Headroom: ${tokenBudget.headroomTokens}\nClamped Output: ${tokenBudget.outputTokens}${
+                    tokenBudget.wasPruned ? " (Oldest Turns Pruned!)" : ""
+                  }`}
+                >
+                  <Zap className="w-3 h-3 text-amber-400" />
+                  <span>
+                    {tokenBudget.inputTokens.toLocaleString()}/{tokenBudget.maxContextTokens.toLocaleString()}
+                  </span>
+                  {tokenBudget.wasPruned && (
+                    <span className="px-1 py-0.2 rounded text-[9px] bg-rose-500/30 text-rose-200 font-bold">
+                      PRUNED
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono text-zinc-400 bg-zinc-900 border border-zinc-800"
+                  title="Context Budget: 8k Tokens Headroom Active"
+                >
+                  <Zap className="w-3 h-3 text-zinc-500" />
+                  <span>8k Context</span>
+                </div>
+              )}
+
+              {/* RisuAI: Provider Cascade Resilience Status */}
+              <div
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono border transition ${
+                  providerTelemetry.fallbackTriggered
+                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                    : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                }`}
+                title={`Provider Cascade Telemetry: ${providerTelemetry.providerUsed} (Fallback: ${
+                  providerTelemetry.fallbackTriggered ? "Triggered" : "Direct"
+                })`}
+              >
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                <span className="hidden xl:inline truncate max-w-[120px]">{providerTelemetry.providerUsed}</span>
+                <span className="xl:hidden">Cascade</span>
+              </div>
+
+              {/* RisuAI: Chat Variables Inspector Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsVariablesOpen(true)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
+                title="Inspect & Tune Live Chat Variables"
+              >
+                <span className="font-mono text-purple-400 font-bold">{"{x}"}</span>
+                <span>Vars</span>
+              </button>
+
+              {/* RisuAI: Associative Graph Memory Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsGraphOpen(true)}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Explore Associative Knowledge Graph (GraphMem)"
+              >
+                <Network className="w-3 h-3 text-cyan-400" />
+                <span>GraphMem</span>
               </button>
             </div>
 
@@ -1003,6 +1215,197 @@ export function SaanStageChatView({
         onTriggerScan={() => onRefreshSoul?.()}
         onFollowUp={(topic) => handleSend(`Saan, aao is baare mein baat karte hain: "${topic}"`)}
       />
+
+      {/* RisuAI Chat Variables Inspector Modal */}
+      {isVariablesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <header className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-purple-400 font-bold text-lg">{"{ x }"}</span>
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-100">RisuAI Chat Variables Inspector</h3>
+                  <p className="text-xs text-zinc-400">Persistent session variables evaluated in prompt macros</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVariablesOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {Object.entries(chatVariables).map(([key, value]) => {
+                  const isNum = typeof value === "number";
+                  const isBool = typeof value === "boolean";
+                  return (
+                    <div
+                      key={key}
+                      className="p-3 rounded-xl bg-zinc-950/50 border border-zinc-800/80 flex items-center justify-between gap-3 hover:border-purple-500/30 transition"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-[11px] font-mono text-purple-400 font-bold block truncate">
+                          {"{{" + key + "}}"}
+                        </span>
+                        <span className="text-sm font-medium text-zinc-200 truncate block">
+                          {String(value)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isNum && (
+                          <button
+                            type="button"
+                            onClick={() => handleIncrementVariable(key, 1)}
+                            className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition"
+                            title="Increment +1"
+                          >
+                            +1
+                          </button>
+                        )}
+                        {isBool && (
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVariable(key)}
+                            className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition"
+                            title="Toggle Boolean"
+                          >
+                            Toggle
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add New Variable Form */}
+              <div className="mt-4 pt-3 border-t border-zinc-800/80 flex flex-col sm:flex-row gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="variable_name"
+                  value={newVarKey}
+                  onChange={(e) => setNewVarKey(e.target.value)}
+                  className="w-full sm:w-1/3 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:outline-none focus:border-purple-500"
+                />
+                <input
+                  type="text"
+                  placeholder="value (string, number, or boolean)"
+                  value={newVarVal}
+                  onChange={(e) => setNewVarVal(e.target.value)}
+                  className="w-full sm:flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    let val: any = newVarVal;
+                    if (val === "true") val = true;
+                    else if (val === "false") val = false;
+                    else if (!isNaN(Number(val)) && val.trim() !== "") val = Number(val);
+                    handleSetVariable(newVarKey, val);
+                  }}
+                  disabled={!newVarKey.trim()}
+                  className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white text-xs font-medium flex items-center justify-center gap-1 transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Set</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RisuAI Associative Knowledge Graph (GraphMem) Modal */}
+      {isGraphOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-3xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <header className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+              <div className="flex items-center gap-2">
+                <Network className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-100">Associative Entity Graph (GraphMem)</h3>
+                  <p className="text-xs text-zinc-400">Multi-hop BFS relational memory network linking Saan's core knowledge</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsGraphOpen(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            {/* Search Bar */}
+            <div className="p-4 border-b border-zinc-800/80 bg-zinc-950/40">
+              <div className="relative">
+                <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search entities or topics (e.g., 'Krishna', 'Phryvos', 'Chai')..."
+                  value={graphQuery}
+                  onChange={(e) => handleSearchGraph(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-cyan-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* Graph Node Cards Grid */}
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {graphSearchResults.map((node, idx) => (
+                  <div
+                    key={node.name || idx}
+                    className="p-3.5 rounded-xl bg-zinc-950/60 border border-zinc-800/80 hover:border-cyan-500/40 transition flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-bold text-cyan-300 font-mono flex items-center gap-1.5">
+                          <Database className="w-3.5 h-3.5 text-cyan-400" />
+                          {node.name}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          {node.connections?.length || 0} links
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-300 leading-relaxed mb-3">
+                        {node.summary}
+                      </p>
+                    </div>
+
+                    {/* Connected Edge Badges */}
+                    {node.connections && node.connections.length > 0 && (
+                      <div className="pt-2 border-t border-zinc-800/50 flex flex-wrap gap-1">
+                        <span className="text-[10px] text-zinc-500 font-mono mr-1">Edges:</span>
+                        {node.connections.map((conn: string) => (
+                          <button
+                            key={conn}
+                            type="button"
+                            onClick={() => handleSearchGraph(conn)}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950/60 text-cyan-300 border border-cyan-800/40 hover:bg-cyan-900/60 transition"
+                          >
+                            {conn}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {graphSearchResults.length === 0 && (
+                <div className="text-center py-12 text-zinc-500 text-xs">
+                  No matching graph entities found for &quot;{graphQuery}&quot;.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

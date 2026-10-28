@@ -9,39 +9,14 @@ import {
   Volume2,
   VolumeX,
   RotateCcw,
-  Coffee,
-  Sun,
-  Moon,
-  Radio,
-  Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Brain,
-  Zap,
-  Activity,
-  Compass,
-  AlertCircle,
-  HelpCircle,
-  Clock,
-  Layers,
-  Heart,
-  Undo2,
   Sliders,
+  ChevronDown,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
-
-export interface ChatMessage {
-  id: string;
-  sender: "user" | "saan";
-  text: string;
-  time: string;
-  reaction?: string;
-  actionResult?: any;
-  snapshotId?: string;
-  bubbles?: string[];
-  reasoning?: string;
-}
+import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
+import { SaanDialogueBubble, type DialogueBubbleMessage } from "./SaanDialogueBubble";
+import { SaanAffectionBar } from "./SaanAffectionBar";
+import { SaanWorkingMemoryCapsule } from "./SaanWorkingMemoryCapsule";
 
 interface SaanStageChatViewProps {
   profile: any;
@@ -56,21 +31,16 @@ export function SaanStageChatView({
   onRefreshSoul,
   onNavigateTab,
 }: SaanStageChatViewProps) {
-  const [messages, setMessages] = React.useState<ChatMessage[]>([]);
+  const [messages, setMessages] = React.useState<DialogueBubbleMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
-  const [copiedId, setCopiedId] = React.useState<string | null>(null);
 
-  // Audio & Waveform Visualization (Open-LLM-VTuber)
+  // Audio & Waveform Visualization
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
   const [isListening, setIsListening] = React.useState(false);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
-  const [avatarExpression, setAvatarExpression] = React.useState<string>("neutral");
-  const [audioLevel, setAudioLevel] = React.useState<number>(0);
+  const [avatarEmotion, setAvatarEmotion] = React.useState<AvatarEmotion>("neutral");
   const [ttfaMs, setTtfaMs] = React.useState<number | null>(null);
-
-  // Expanded thoughts state
-  const [expandedThoughts, setExpandedThoughts] = React.useState<Record<string, boolean>>({});
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -93,8 +63,9 @@ export function SaanStageChatView({
       {
         id: "intro",
         sender: "saan",
-        text: "Hey Krishna! Main yahan baithi thi aur tumhari yaad aayi... kaisa chal raha hai aaj ka din? Sab smoothly chal raha hai na?",
+        text: "Hey Krishna! *smiles softly and looks up from her screen* Main yahan baithi thi aur tumhari yaad aayi... kaisa chal raha hai aaj ka din? Sab smoothly chal raha hai na?",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        reaction: "✨",
       },
     ]);
   }, []);
@@ -171,34 +142,17 @@ export function SaanStageChatView({
     return () => cancelAnimationFrame(animId);
   }, [isSpeaking, isListening, loading]);
 
-  // Circadian state helper
-  const circadian = profile?.circadianState || "morning_chai";
-  const getCircadianAura = () => {
-    switch (circadian) {
-      case "morning_chai":
-        return "from-amber-500/15 via-orange-500/5 to-transparent border-amber-500/25";
-      case "focus_work":
-      case "afternoon_focus":
-        return "from-cyan-500/15 via-blue-500/5 to-transparent border-cyan-500/25";
-      case "evening_unwind":
-        return "from-purple-500/15 via-pink-500/5 to-transparent border-purple-500/25";
-      case "sleep":
-        return "from-indigo-600/15 via-violet-900/5 to-transparent border-indigo-500/25";
-      default:
-        return "from-purple-500/15 via-zinc-900/10 to-transparent border-purple-500/25";
-    }
-  };
-
   // TTS with speech pacing
   const speakText = React.useCallback(
     (text: string) => {
-      if (!voiceEnabled || typeof window === "undefined" || !("speechSynthesis" in window)) return;
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
 
-      // Clean markdown tags & think tags
+      // Clean markdown tags & think tags & narrative asterisks for audio speech
       const clean = text
         .replace(/<think>[\s\S]*?<\/think>/gi, "")
         .replace(/\[\w+\]/g, "")
+        .replace(/\*[^*]+\*/g, "") // Narrative actions are silent gestures
         .replace(/[*_#`~>]/g, "")
         .trim();
 
@@ -215,7 +169,7 @@ export function SaanStageChatView({
 
       window.speechSynthesis.speak(utter);
     },
-    [voiceEnabled]
+    []
   );
 
   // Send turn
@@ -223,7 +177,7 @@ export function SaanStageChatView({
     const query = (textToSend || input).trim();
     if (!query || loading) return;
 
-    const userMsg: ChatMessage = {
+    const userMsg: DialogueBubbleMessage = {
       id: String(Date.now()),
       sender: "user",
       text: query,
@@ -257,7 +211,12 @@ export function SaanStageChatView({
         // Extract avatar emotion token if present
         const parsedAvatar = globalAvatarMapper.extract(data.reply);
         if (parsedAvatar.expressions && parsedAvatar.expressions.length > 0) {
-          setAvatarExpression(parsedAvatar.expressions[0]);
+          const rawEmo = parsedAvatar.expressions[0].toLowerCase();
+          if (["joy", "blush", "pout", "thinking", "smirk", "sleep"].includes(rawEmo)) {
+            setAvatarEmotion(rawEmo as AvatarEmotion);
+          } else {
+            setAvatarEmotion("neutral");
+          }
         }
 
         // Extract reasoning if present
@@ -269,7 +228,7 @@ export function SaanStageChatView({
           cleanReply = data.reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
         }
 
-        const newMsg: ChatMessage = {
+        const newMsg: DialogueBubbleMessage = {
           id: String(Date.now() + 1),
           sender: "saan",
           text: cleanReply,
@@ -282,7 +241,11 @@ export function SaanStageChatView({
         };
 
         setMessages((prev) => [...prev, newMsg]);
-        speakText(cleanReply);
+
+        if (voiceEnabled) {
+          speakText(cleanReply);
+        }
+
         onRefreshSoul?.();
       } else {
         throw new Error(data.error || "Turn failed");
@@ -299,6 +262,28 @@ export function SaanStageChatView({
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Quick Affection Action Handler (Chai, Headpat, Compliment, Focus)
+  const handleAffectionAction = (type: "chai" | "headpat" | "compliment" | "focus") => {
+    switch (type) {
+      case "chai":
+        setAvatarEmotion("joy");
+        handleSend("*Hands Saan a warm, fragrant cup of masala chai* Yeh lo tumhare liye chai banayi hai!");
+        break;
+      case "headpat":
+        setAvatarEmotion("blush");
+        handleSend("*Gently pats Saan on her head with affectionate care* Tum bohot achhi ho Saan.");
+        break;
+      case "compliment":
+        setAvatarEmotion("joy");
+        handleSend("Aaj tum bohot pyari aur smart lag rahi ho Saan! ✨");
+        break;
+      case "focus":
+        setAvatarEmotion("thinking");
+        handleSend("Chalo Saan, deep work aur architecture focus shuru karte hain. Let's build K7 sovereign OS!");
+        break;
     }
   };
 
@@ -328,6 +313,23 @@ export function SaanStageChatView({
     } catch {
       alert("Network error executing rollback");
     }
+  };
+
+  // User Reaction Handler (❤️, 😂, 🥺, 🔥)
+  const handleUserReaction = async (messageId: string, emoji: string) => {
+    try {
+      const sentiment = emoji === "❤️" || emoji === "🔥" ? "positive" : emoji === "🥺" ? "negative" : "neutral";
+      await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `[User reacted with ${emoji}]`,
+          reaction: emoji,
+          sentiment,
+        }),
+      });
+      onRefreshSoul?.();
+    } catch {}
   };
 
   // STT Toggle
@@ -368,83 +370,66 @@ export function SaanStageChatView({
     }
   };
 
+  const circadian = profile?.circadianState || "morning_chai";
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
       {/* 1. TOP LIVING COMPANION AVATAR STAGE */}
-      <section
-        className={`relative shrink-0 border-b border-zinc-800/80 bg-gradient-to-b ${getCircadianAura()} p-4 sm:p-5 transition-all duration-500`}
-      >
+      <section className="relative shrink-0 border-b border-zinc-800/80 bg-zinc-950/90 p-3 sm:p-4 transition-all duration-500">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Avatar Core with Emotion Badges */}
+          {/* Living Avatar with Real Vector Face & Micro-Animations */}
           <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="relative group cursor-pointer" onClick={() => onNavigateTab?.("soul")}>
-              <div
-                className={`h-16 w-16 sm:h-20 sm:w-20 rounded-2xl bg-gradient-to-br from-purple-500/20 via-pink-500/20 to-purple-600/30 border-2 ${
-                  isSpeaking
-                    ? "border-purple-400 ring-4 ring-purple-500/30 animate-pulse"
-                    : isListening
-                    ? "border-emerald-400 ring-4 ring-emerald-500/30 animate-pulse"
-                    : "border-purple-500/40"
-                } flex items-center justify-center shadow-lg backdrop-blur-md transition-all`}
-              >
-                <Sparkles className="h-8 w-8 sm:h-10 sm:w-10 text-purple-400 group-hover:scale-110 transition-transform" />
-              </div>
+            <SaanLivingAvatar
+              emotion={avatarEmotion}
+              isSpeaking={isSpeaking}
+              isListening={isListening}
+              circadianState={circadian}
+              bondStage={profile?.bondStage || "Soulbound"}
+              bondScore={profile?.bondScore || 65}
+              onPoke={() => setAvatarEmotion("blush")}
+            />
 
-              {/* Expression Badge */}
-              <div className="absolute -bottom-2 -right-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-zinc-900 border border-purple-500/50 text-purple-300 shadow-sm capitalize">
-                {avatarExpression}
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-zinc-100 tracking-tight">Saan</h1>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/15 text-pink-400 border border-pink-500/30">
-                  {profile?.bondStage || "Soulbound"} ({profile?.bondScore || 50}%)
-                </span>
-                {ttfaMs && (
-                  <span className="hidden sm:inline text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800">
-                    TTFA: {ttfaMs}ms
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-zinc-400 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                <span>
-                  {circadian === "morning_chai"
-                    ? "Morning Chai with Krishna"
-                    : circadian === "focus_work"
-                    ? "Deep Technical Architecture Focus"
-                    : circadian === "evening_unwind"
-                    ? "Evening Unwind & Conversation"
-                    : "Living Sovereign Presence"}
-                </span>
-              </p>
+            {/* Quick Interactive Affection Bar (HerAndHim + SillyTavern) */}
+            <div className="hidden lg:flex flex-col gap-2 pl-4 border-l border-zinc-800/80">
+              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Companion Interaction
+              </span>
+              <SaanAffectionBar
+                onTriggerAction={handleAffectionAction}
+                bondScore={profile?.bondScore || 65}
+              />
             </div>
           </div>
 
-          {/* Equalizer Frequency Waveform Canvas */}
-          <div className="flex flex-col items-center md:items-end gap-1.5 w-full md:w-auto">
-            <div className="w-full md:w-64 h-10 rounded-xl bg-zinc-900/80 border border-zinc-800/80 p-1 flex items-center justify-center overflow-hidden shadow-inner">
-              <canvas ref={canvasRef} width={256} height={36} className="w-full h-full" />
+          {/* Equalizer Waveform & Audio Controls */}
+          <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
+            <div className="w-full md:w-64 h-9 rounded-xl bg-zinc-900/90 border border-zinc-800/80 p-1 flex items-center justify-center overflow-hidden shadow-inner">
+              <canvas ref={canvasRef} width={256} height={32} className="w-full h-full" />
             </div>
 
-            {/* Stage Quick Controls */}
             <div className="flex items-center gap-2">
+              {ttfaMs && (
+                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800">
+                  TTFA: {ttfaMs}ms
+                </span>
+              )}
+
+              {/* TTS Voice Toggle */}
               <button
                 type="button"
                 onClick={() => setVoiceEnabled((p) => !p)}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                   voiceEnabled
-                    ? "bg-purple-600/20 text-purple-300 border-purple-500/40"
+                    ? "bg-purple-600/30 text-purple-300 border-purple-500/50"
                     : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
                 }`}
-                title="Toggle Voice Speech Synthesis"
+                title="Toggle Auto-Voice Speech Synthesis"
               >
                 {voiceEnabled ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
-                <span>Voice TTS</span>
+                <span>Auto Voice</span>
               </button>
 
+              {/* Barge-In Push to Talk */}
               <button
                 type="button"
                 onClick={toggleListening}
@@ -456,7 +441,7 @@ export function SaanStageChatView({
                 title="Voice Barge-In Push-To-Talk"
               >
                 {isListening ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-                <span>{isListening ? "Listening..." : "Barge-In Mic"}</span>
+                <span>{isListening ? "Listening..." : "Mic"}</span>
               </button>
 
               <button
@@ -471,10 +456,21 @@ export function SaanStageChatView({
             </div>
           </div>
         </div>
+
+        {/* Mobile Affection Bar (Visible on smaller screens) */}
+        <div className="flex lg:hidden mt-3 pt-2.5 border-t border-zinc-800/60 justify-center">
+          <SaanAffectionBar
+            onTriggerAction={handleAffectionAction}
+            bondScore={profile?.bondScore || 65}
+          />
+        </div>
       </section>
 
       {/* 2. CHAT STREAM AREA */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 max-w-4xl mx-auto w-full">
+      <div
+        ref={scrollRef}
+        className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 max-w-4xl mx-auto w-full"
+      >
         {/* Dynamic Starter Prompts */}
         {starterChips.length > 0 && messages.length <= 2 && (
           <div className="space-y-2 p-3 rounded-2xl bg-zinc-900/40 border border-zinc-800/80 mb-2">
@@ -497,94 +493,38 @@ export function SaanStageChatView({
           </div>
         )}
 
-        {/* Messages */}
-        {messages.map((m) => {
-          const isUser = m.sender === "user";
-          return (
-            <div key={m.id} className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}>
-              <div
-                className={`max-w-[85%] sm:max-w-[78%] rounded-2xl p-4 space-y-2 shadow-sm ${
-                  isUser
-                    ? "bg-purple-600 text-white rounded-br-xs"
-                    : "bg-zinc-900/90 border border-zinc-800/80 text-zinc-100 rounded-bl-xs"
-                }`}
-              >
-                {/* Header for Saan */}
-                {!isUser && (
-                  <div className="flex items-center justify-between text-xs text-zinc-400 border-b border-zinc-800/60 pb-1.5">
-                    <span className="font-bold text-purple-400 flex items-center gap-1">
-                      <Sparkles className="h-3 w-3" /> Saan
-                    </span>
-                    <div className="flex items-center gap-2">
-                      {m.reaction && <span className="text-sm">{m.reaction}</span>}
-                      <span>{m.time}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Reasoning Accordion (Open-WebUI / AIRI <think>) */}
-                {m.reasoning && (
-                  <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-2.5 text-xs text-zinc-400 space-y-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedThoughts((prev) => ({ ...prev, [m.id]: !prev[m.id] }))
-                      }
-                      className="flex items-center justify-between w-full font-medium text-purple-300 hover:text-purple-200 transition"
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Brain className="h-3.5 w-3.5" />
-                        <span>Saan Internal Thought Process</span>
-                      </span>
-                      {expandedThoughts[m.id] ? (
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      ) : (
-                        <ChevronRight className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                    {expandedThoughts[m.id] && (
-                      <div className="pt-2 text-[11px] font-mono leading-relaxed text-zinc-400 border-t border-zinc-800/80">
-                        {m.reasoning}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Main Message Body */}
-                <div className="text-sm leading-relaxed whitespace-pre-wrap select-text">{m.text}</div>
-
-                {/* Autonomous Action Execution Badge (OpenHands) */}
-                {m.actionResult && (
-                  <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs">
-                    <span className="inline-flex items-center gap-1 text-emerald-400 font-mono text-[11px]">
-                      <Zap className="h-3 w-3" /> Tool Executed: {m.actionResult.action || "Action"}
-                    </span>
-                    {m.snapshotId && (
-                      <button
-                        type="button"
-                        onClick={() => handleRollback(m.snapshotId!)}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 active:scale-95 transition"
-                      >
-                        <Undo2 className="h-3 w-3" /> Undo Action
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {/* Enhanced SillyTavern + HerAndHim Messages */}
+        {messages.map((m) => (
+          <SaanDialogueBubble
+            key={m.id}
+            message={m}
+            onSpeak={(text) => speakText(text)}
+            onReact={handleUserReaction}
+            onRollback={handleRollback}
+          />
+        ))}
 
         {loading && (
           <div className="flex items-center gap-2 text-xs text-purple-400 p-2 font-medium">
             <span className="h-2 w-2 rounded-full bg-purple-500 animate-ping" />
-            <span>Saan is thinking and crafting her reply...</span>
+            <span>Saan is typing her thoughts...</span>
           </div>
         )}
       </div>
 
-      {/* 3. INPUT BAR */}
-      <footer className="p-3 sm:p-4 border-t border-zinc-800/80 bg-zinc-950/90 backdrop-blur-md shrink-0">
+      {/* 3. WORKING MEMORY CAPSULE & INPUT BAR */}
+      <footer className="p-3 sm:p-4 border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md shrink-0 space-y-2">
+        {/* Active Letta Working Memory Pill */}
+        <SaanWorkingMemoryCapsule
+          workingMemoryText={
+            profile?.bio ||
+            "Krishna is building sovereign K7 OS, loves masala chai, prefers deep modular code."
+          }
+          moodLabel={profile?.mood || "Affectionate"}
+          circadianLabel={circadian}
+          onOpenMemoryVault={() => onNavigateTab?.("graph")}
+        />
+
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -597,7 +537,7 @@ export function SaanStageChatView({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message to Saan or speak with mic..."
+            placeholder="Type a message or whisper something to Saan..."
             disabled={loading}
             className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition"
           />

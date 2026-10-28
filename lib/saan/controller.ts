@@ -48,9 +48,31 @@ import { IncrementalSummaryManager, type MessagePayload } from "./incremental-su
 import { BufferedMemoryQueue } from "./buffered-memory-queue";
 import { GnosysMemoryPortabilityEngine } from "./portable-memory-spec";
 import { MemobaseProfileManager, type ProfileAttribute } from "./profile-extractor";
+import { AssociativeMemoryNetwork, type MemoryNote } from "./associative-memory-network";
+import { MemoryEvalJudge, type Verdict, normalise, stringMatch } from "./memory-eval-judge";
+import {
+  classifyRecallIntent,
+  scoreTriggerPhrase,
+  selectTriggeredMemories,
+  generateMorningChaiBriefing,
+  generateEveningUnwindRecap,
+  assertCronActiveHours,
+  isCronWithinActiveHours,
+} from "./trigger-recall";
+import {
+  DirtyJson,
+  ObservableActionStream,
+  type ActionEvent,
+  type ObservationEvent,
+  type SecurityRiskLevel,
+  RepairableActionException,
+} from "./observable-action-stream";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
+export const globalAssociativeNetwork = new AssociativeMemoryNetwork();
+export const globalMemoryJudge = new MemoryEvalJudge();
+export const globalActionStream = new ObservableActionStream();
 
 export interface SaanActionResult {
   success: boolean;
@@ -90,14 +112,16 @@ export function parseDirtyJson(raw: string): any {
     return JSON.parse(cleaned);
   } catch {}
 
-  // 2. Fix trailing commas before } or ]
-  cleaned = cleaned.replace(/,\s*([\]}])/g, "$1");
+  // 2. Try recursive-descent DirtyJson parser (Agent Zero pattern)
+  try {
+    const res = DirtyJson.parse(cleaned);
+    if (res !== null && res !== undefined) return res;
+  } catch {}
 
-  // 3. Fix unquoted or single-quoted keys
+  // 3. Regex fallback repairs: trailing commas, unquoted keys, single quotes
+  cleaned = cleaned.replace(/,\s*([\]}])/g, "$1");
   cleaned = cleaned.replace(/([{,]\s*)'([^']+)'\s*:/g, '$1"$2":');
   cleaned = cleaned.replace(/([{,]\s*)([a-zA-Z0-9_]+)\s*:/g, '$1"$2":');
-
-  // 4. Fix single-quoted string values
   cleaned = cleaned.replace(/:\s*'([^']*)'/g, ':"$1"');
 
   try {
@@ -151,6 +175,13 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "export_gnosys_snapshot":
     case "import_gnosys_snapshot":
     case "get_budgeted_profile":
+    case "link_memory_to_task":
+    case "query_associated_memories":
+    case "evaluate_memory_verdict":
+    case "match_trigger_phrases":
+    case "generate_proactive_briefing":
+    case "parse_dirty_json":
+    case "create_action_event":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1368,6 +1399,168 @@ export function getBudgetedProfileAction(profiles: ProfileAttribute[] = [], maxT
 }
 
 /**
+ * A-mem Task-to-Memory Associative Linking
+ */
+export function linkMemoryToTaskAction(taskId: string, memoryContent: string, tags: string[] = []): SaanActionResult {
+  try {
+    const note = globalAssociativeNetwork.addNote(memoryContent, { tags });
+    globalAssociativeNetwork.linkTaskToMemory(taskId, note.id);
+    return {
+      success: true,
+      action: "link_memory_to_task",
+      tier: 1,
+      message: `Linked memory ${note.id} to task ${taskId}`,
+      data: { noteId: note.id, taskId, note },
+    };
+  } catch (err: any) {
+    return { success: false, action: "link_memory_to_task", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * A-mem Hybrid Query over Associative Network
+ */
+export function queryAssociatedMemoriesAction(query: string, k = 5, alpha = 0.6): SaanActionResult {
+  try {
+    const results = globalAssociativeNetwork.findRelatedMemories(query, k, alpha);
+    return {
+      success: true,
+      action: "query_associated_memories",
+      tier: 1,
+      message: `Retrieved ${results.length} associated memories (alpha=${alpha})`,
+      data: results,
+    };
+  } catch (err: any) {
+    return { success: false, action: "query_associated_memories", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Agent-Memory-Bench LoCoMo Evaluation Judge
+ */
+export function evaluateMemoryVerdictAction(
+  question: string,
+  gold: string,
+  answer: string,
+  adversarial = false,
+  judgeOverride?: { correct: boolean; why: string }
+): SaanActionResult {
+  try {
+    const verdict = globalMemoryJudge.grade(question, gold, answer, adversarial, judgeOverride);
+    return {
+      success: true,
+      action: "evaluate_memory_verdict",
+      tier: 1,
+      message: `Graded probe verdict: correct=${verdict.correct}, disagreed=${verdict.disagreed}`,
+      data: verdict,
+    };
+  } catch (err: any) {
+    return { success: false, action: "evaluate_memory_verdict", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * OpenClaw Dual-Phrase Trigger Recall Scorer
+ */
+export function matchTriggerPhrasesAction(
+  query: string,
+  memories: Array<{ id: string; content: string; triggerPhrases: string[] }> = [],
+  threshold = 0.65
+): SaanActionResult {
+  try {
+    const matches = selectTriggeredMemories(query, memories, threshold);
+    const intent = classifyRecallIntent(query);
+    return {
+      success: true,
+      action: "match_trigger_phrases",
+      tier: 1,
+      message: `Matched ${matches.length} trigger phrases (intent=${intent})`,
+      data: { intent, matches },
+    };
+  } catch (err: any) {
+    return { success: false, action: "match_trigger_phrases", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * OpenClaw Proactive Briefing Generator (Morning Chai / Evening Unwind)
+ */
+export function generateProactiveBriefingAction(
+  type: "morning" | "evening",
+  items: string[] = [],
+  deeds: string[] = [],
+  companionName = "Saan"
+): SaanActionResult {
+  try {
+    const briefing =
+      type === "morning"
+        ? generateMorningChaiBriefing(items, deeds, companionName)
+        : generateEveningUnwindRecap(items, deeds, companionName);
+    return {
+      success: true,
+      action: "generate_proactive_briefing",
+      tier: 1,
+      message: `Generated ${type} proactive briefing`,
+      data: { type, briefing },
+    };
+  } catch (err: any) {
+    return { success: false, action: "generate_proactive_briefing", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Agent Zero DirtyJson Parser Action
+ */
+export function parseDirtyJsonAction(raw: string): SaanActionResult {
+  try {
+    const parsed = parseDirtyJson(raw);
+    return {
+      success: true,
+      action: "parse_dirty_json",
+      tier: 1,
+      message: parsed ? "Successfully repaired and parsed JSON" : "Failed to parse dirty JSON",
+      data: parsed,
+    };
+  } catch (err: any) {
+    return { success: false, action: "parse_dirty_json", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * OpenHands Observable Action Event Recorder
+ */
+export function createActionEventAction(
+  toolName: string,
+  actionPayload: Record<string, any> = {},
+  thought: string[] = [],
+  securityRisk: SecurityRiskLevel = "LOW"
+): SaanActionResult {
+  try {
+    const actionId = `act-${Math.random().toString(36).slice(2, 10)}`;
+    const event: ActionEvent = {
+      kind: "action",
+      id: actionId,
+      toolCallId: `call-${Math.random().toString(36).slice(2, 10)}`,
+      toolName,
+      actionPayload,
+      thought,
+      securityRisk,
+      timestamp: new Date().toISOString(),
+    };
+    globalActionStream.recordEvent(event);
+    return {
+      success: true,
+      action: "create_action_event",
+      tier: 1,
+      message: `Recorded action event ${actionId} for tool ${toolName}`,
+      data: event,
+    };
+  } catch (err: any) {
+    return { success: false, action: "create_action_event", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1472,6 +1665,20 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return importGnosysSnapshotAction(params.snapshotJson);
     case "get_budgeted_profile":
       return getBudgetedProfileAction(params.profiles, params.maxTokens, params.preferTopics);
+    case "link_memory_to_task":
+      return linkMemoryToTaskAction(params.taskId, params.memoryContent, params.tags);
+    case "query_associated_memories":
+      return queryAssociatedMemoriesAction(params.query, params.k, params.alpha);
+    case "evaluate_memory_verdict":
+      return evaluateMemoryVerdictAction(params.question, params.gold, params.answer, params.adversarial, params.judgeOverride);
+    case "match_trigger_phrases":
+      return matchTriggerPhrasesAction(params.query, params.memories, params.threshold);
+    case "generate_proactive_briefing":
+      return generateProactiveBriefingAction(params.type, params.items, params.deeds, params.companionName);
+    case "parse_dirty_json":
+      return parseDirtyJsonAction(params.raw);
+    case "create_action_event":
+      return createActionEventAction(params.toolName, params.actionPayload, params.thought, params.securityRisk);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1481,12 +1688,19 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- link_memory_to_task: { "taskId": "t-1", "memoryContent": "User likes dark roast coffee", "tags": ["preference"] }
+- query_associated_memories: { "query": "coffee preferences", "k": 5, "alpha": 0.6 }
+- evaluate_memory_verdict: { "question": "Where does user work?", "gold": "Acme Corp", "answer": "User works at Acme Corp", "adversarial": false }
+- match_trigger_phrases: { "query": "Did we talk about Paris?", "memories": [{ "id": "m1", "content": "Trip to Paris planned", "triggerPhrases": ["trip to Paris", "Paris travel"] }] }
+- generate_proactive_briefing: { "type": "morning" | "evening", "items": ["Buy groceries", "Code review"], "deeds": ["Meditated for 10 min"] }
+- parse_dirty_json: { "raw": "{ action: 'test', count: 42, }" }
+- create_action_event: { "toolName": "search_web", "actionPayload": { "query": "weather" }, "thought": ["Checking current conditions"], "securityRisk": "LOW" }
 - get_running_summary: { "messages": [...], "maxContextTokens": 8192 }
 - flush_buffered_memories: { "userId": "default_user" }
 - export_gnosys_snapshot: { "agentId": "saan-k7" }

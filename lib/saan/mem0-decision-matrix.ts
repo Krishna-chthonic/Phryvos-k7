@@ -177,3 +177,38 @@ export function createMemoryAuditEvent(
     agentId,
   };
 }
+
+// In-memory rolling audit buffer (last 50 events)
+const mem0AuditBuffer: MemoryAuditEvent[] = [
+  {
+    id: `audit_init_1`,
+    memory: "Krishna prefers nocturnal architectural focus sessions",
+    event: "ADD",
+    timestamp: Date.now() - 3600000,
+    userId: "krishna",
+    agentId: "saan",
+  },
+  {
+    id: `audit_init_2`,
+    memory: "Switched default beverage to cardamom masala chai",
+    event: "UPDATE",
+    timestamp: Date.now() - 1800000,
+    userId: "krishna",
+    agentId: "saan",
+  },
+];
+
+export function recordMem0AuditEvent(event: MemoryAuditEvent): void {
+  mem0AuditBuffer.push(event);
+  if (mem0AuditBuffer.length > 50) {
+    mem0AuditBuffer.shift();
+  }
+}
+
+export function getMem0AuditLog(): MemoryAuditEvent[] {
+  return [...mem0AuditBuffer].reverse();
+}
+
+export function clearMem0AuditLog(): void {
+  mem0AuditBuffer.length = 0;
+}

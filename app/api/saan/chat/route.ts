@@ -56,6 +56,7 @@ import {
 } from "@/lib/saan/graph-memory";
 import { globalChatVariables } from "@/lib/saan/chat-variables";
 import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
+import { getMem0AuditLog } from "@/lib/saan/mem0-decision-matrix";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -159,6 +160,11 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Mem0 4-State Memory Audit Log
+    if (body.type === "get_mem0_events") {
+      return NextResponse.json({ ok: true, events: getMem0AuditLog() });
+    }
+
     const rawUserMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 
@@ -197,8 +203,8 @@ export async function POST(req: NextRequest) {
     const overusedPhrases = findOverusedPhrases(assistantReplies);
     const antiSlopPrompt = formatAntiSlopPrompt(overusedPhrases);
 
-    // 1. Extract and store any new memories from the user's message (Mem0 / Memobase)
-    extractMemoriesFromTurn(userMessage);
+    // 1. Extract and store any new memories from the user's message (Mem0 4-State Engine)
+    const mem0Decisions = extractMemoriesFromTurn(userMessage);
 
     // 2. Load context: bond score & active bi-temporal memories (Graphiti / Datapace)
     const bondScore = bumpBondScore(1);
@@ -487,6 +493,8 @@ export async function POST(req: NextRequest) {
       graphAssociations: graphResult.matchedNodes.map((n) => n.name),
       chatVariables: globalChatVariables.getAll(),
       coreMemorySummary: getCoreMemoryManager().getCapacitySummary(),
+      mem0Decisions,
+      mem0Events: getMem0AuditLog(),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

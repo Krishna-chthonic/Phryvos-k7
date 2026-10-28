@@ -22,6 +22,14 @@ import {
   FLASHBULB_STABILITY_FLOOR,
   INITIAL_STABILITY,
 } from "@/lib/saan/mimir-cognitive";
+import {
+  evaluateMem0Decision,
+  recordMem0AuditEvent,
+  createMemoryAuditEvent,
+  type MemoryDecision,
+  type CandidateFact,
+  type ExistingMemoryItem,
+} from "@/lib/saan/mem0-decision-matrix";
 
 export interface SaanMemory {
   id: number;
@@ -419,12 +427,13 @@ export function bumpBondScore(delta = 1): number {
 }
 
 /**
- * Intelligent extraction of memories from a user message (Mem0 inspired)
- * Picks up explicit directives ("yaad rakhna", "remember that") and key personal facts.
+ * Intelligent extraction of memories from a user message with Mem0 4-State Decision Matrix
+ * Evaluates candidate facts against existing memories: ADD, UPDATE, DELETE, or NONE.
  */
-export function extractMemoriesFromTurn(userMessage: string): void {
+export function extractMemoriesFromTurn(userMessage: string): MemoryDecision[] {
   const text = userMessage.trim();
   const lower = text.toLowerCase();
+  const candidates: CandidateFact[] = [];
 
   // 1. Explicit memory triggers (Memobase pattern)
   const explicitMatches = [
@@ -440,8 +449,12 @@ export function extractMemoriesFromTurn(userMessage: string): void {
         .replace(/^[:,\s-]+/, "")
         .trim();
       if (cleaned.length > 5) {
-        saveSaanMemory(cleaned, "preference", 8, "explicit_directive");
-        return;
+        candidates.push({
+          text: cleaned,
+          category: "preference",
+          sourceRole: "user",
+          confidence: 0.95,
+        });
       }
     }
   }
@@ -449,19 +462,93 @@ export function extractMemoriesFromTurn(userMessage: string): void {
   // 2. Name / Identity patterns
   const nameMatch = text.match(/(?:mera naam|my name is|i am|main)\s+([A-Z][a-z]+)/i);
   if (nameMatch && !["Saan", "User", "Ghar", "Theek"].includes(nameMatch[1])) {
-    saveSaanMemory(`User's name is ${nameMatch[1]}`, "fact", 9, "implicit");
+    candidates.push({
+      text: `User's name is ${nameMatch[1]}`,
+      category: "personal",
+      sourceRole: "user",
+      confidence: 0.98,
+    });
   }
 
   // 3. Exam / Goals mention
   if (/(?:exam|test|interview|target|submission)\s+(?:hai|on|hoga)/i.test(lower)) {
-    saveSaanMemory(`Upcoming deadline/event: "${text.slice(0, 120)}"`, "fact", 7, "implicit");
+    candidates.push({
+      text: `Upcoming deadline/event: "${text.slice(0, 120)}"`,
+      category: "plan",
+      sourceRole: "user",
+      confidence: 0.85,
+    });
   }
 
-  // 4. Strong likes/dislikes
+  // 4. Strong likes/dislikes / preferences
   if (/(?:mujhe|i\s+like|i\s+love)\s+([^,.?!]+?)\s+(?:pasand hai|bahut pasand hai)/i.test(lower)) {
-    const likeMatch = text.match(/(?:mujhe)\s+([^,.?!]+?)\s+(?:pasand hai|bahut pasand hai)/i);
+    const likeMatch = text.match(/(?:mujhe|i\s+like|i\s+love)\s+([^,.?!]+?)\s+(?:pasand hai|bahut pasand hai)/i);
     if (likeMatch && likeMatch[1]) {
-      saveSaanMemory(`User likes ${likeMatch[1].trim()}`, "preference", 6, "implicit");
+      candidates.push({
+        text: `User likes ${likeMatch[1].trim()}`,
+        category: "preference",
+        sourceRole: "user",
+        confidence: 0.9,
+      });
     }
   }
+
+  // 5. Explicit negations / preference changes
+  if (/(?:no longer|not anymore|ab se nahi|band kar diya|switched to|instead of)\s+([^,.?!]+)/i.test(lower)) {
+    candidates.push({
+      text: text,
+      category: "preference",
+      sourceRole: "user",
+      confidence: 0.9,
+    });
+  }
+
+  if (candidates.length === 0) return [];
+
+  const existingActive = getSaanMemories(50);
+  const existingItems: ExistingMemoryItem[] = existingActive.map((m) => ({
+    id: String(m.id),
+    text: m.point,
+    category: m.category,
+    sourceRole: m.sourceType,
+    updatedAt: m.createdAt,
+    isActive: m.status === "active",
+  }));
+
+  const decisions: MemoryDecision[] = [];
+
+  for (const candidate of candidates) {
+    const decision = evaluateMem0Decision(candidate, existingItems);
+    decisions.push(decision);
+
+    const auditId = `aud_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    switch (decision.event) {
+      case "ADD": {
+        saveSaanMemory(decision.factText, (candidate.category as any) || "general", 7, "implicit");
+        recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "ADD", "krishna", "saan"));
+        break;
+      }
+      case "UPDATE": {
+        if (decision.targetId) {
+          invalidateAndReplaceMemory(Number(decision.targetId), decision.factText, (candidate.category as any) || "general");
+          recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "UPDATE", "krishna", "saan"));
+        }
+        break;
+      }
+      case "DELETE": {
+        if (decision.targetId) {
+          deleteSaanMemory(Number(decision.targetId));
+          recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "DELETE", "krishna", "saan"));
+        }
+        break;
+      }
+      case "NONE": {
+        recordMem0AuditEvent(createMemoryAuditEvent(auditId, decision.factText, "NONE", "krishna", "saan"));
+        break;
+      }
+    }
+  }
+
+  return decisions;
 }

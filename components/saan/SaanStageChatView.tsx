@@ -123,6 +123,11 @@ export function SaanStageChatView({
   const [coreMemHistory, setCoreMemHistory] = React.useState<any[]>([]);
   const [coreMemSaving, setCoreMemSaving] = React.useState(false);
 
+  // Mem0 4-State Mutation Matrix State
+  const [isMem0Open, setIsMem0Open] = React.useState(false);
+  const [mem0Events, setMem0Events] = React.useState<any[]>([]);
+  const [mem0Filter, setMem0Filter] = React.useState<"ALL" | "ADD" | "UPDATE" | "DELETE" | "NONE">("ALL");
+
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -189,6 +194,18 @@ export function SaanStageChatView({
           if (d.summary) setCoreMemSummary(d.summary);
           if (d.history) setCoreMemHistory(d.history);
         }
+      })
+      .catch(() => {});
+
+    // Initial Mem0 4-State Events Fetch
+    fetch("/api/saan/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "get_mem0_events" }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.ok && d.events) setMem0Events(d.events);
       })
       .catch(() => {});
   }, []);
@@ -454,6 +471,7 @@ export function SaanStageChatView({
           snapshotId: data.snapshotId,
           bubbles: data.bubbles,
           reasoning,
+          mem0Decisions: data.mem0Decisions,
         };
 
         // Update RisuAI Telemetry & Variables
@@ -468,6 +486,9 @@ export function SaanStageChatView({
         }
         if (data.coreMemorySummary) {
           setCoreMemSummary(data.coreMemorySummary);
+        }
+        if (data.mem0Events) {
+          setMem0Events(data.mem0Events);
         }
 
         setMessages((prev) => [...prev, newMsg]);
@@ -1099,6 +1120,17 @@ export function SaanStageChatView({
                   </button>
                 );
               })()}
+
+              {/* Mem0: 4-State Mutation Matrix Inspector Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsMem0Open(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Inspect Mem0 4-State Mutation Matrix (ADD/UPDATE/DELETE/NONE)"
+              >
+                <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Mem0: {mem0Events.length}</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1694,6 +1726,117 @@ export function SaanStageChatView({
                 <span>{coreMemSaving ? "Saving..." : "Save to System Prompt RAM"}</span>
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {/* Mem0 4-State Mutation Matrix Modal */}
+      {isMem0Open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-3xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <header className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60">
+              <div className="flex items-center gap-2.5">
+                <Zap className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-100 flex items-center gap-2">
+                    <span>Mem0 4-State Mutation Matrix</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Live Stream
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Real-time memory resolution engine: ADD (novel), UPDATE (refinement), DELETE (contradiction), NONE (duplicate).
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMem0Open(false)}
+                className="p-1 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </header>
+
+            {/* Filter Tabs */}
+            <div className="px-4 py-2.5 border-b border-zinc-800 bg-zinc-950/40 flex items-center gap-2">
+              {(["ALL", "ADD", "UPDATE", "DELETE", "NONE"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setMem0Filter(tab)}
+                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition ${
+                    mem0Filter === tab
+                      ? tab === "ADD"
+                        ? "bg-emerald-500 text-black"
+                        : tab === "UPDATE"
+                        ? "bg-amber-500 text-black"
+                        : tab === "DELETE"
+                        ? "bg-rose-500 text-white"
+                        : "bg-purple-600 text-white"
+                      : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {/* Event List */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+              {mem0Events
+                .filter((ev) => mem0Filter === "ALL" || ev.event === mem0Filter)
+                .map((ev, idx) => (
+                  <div
+                    key={ev.id || idx}
+                    className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80 hover:border-emerald-500/30 transition flex flex-col gap-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                            ev.event === "ADD"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                              : ev.event === "UPDATE"
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                              : ev.event === "DELETE"
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                              : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                          }`}
+                        >
+                          {ev.event === "ADD"
+                            ? "➕ ADD"
+                            : ev.event === "UPDATE"
+                            ? "🔄 UPDATE"
+                            : ev.event === "DELETE"
+                            ? "❌ DELETE"
+                            : "⚪ NONE"}
+                        </span>
+                        <span className="text-xs text-zinc-500 font-mono">
+                          {ev.userId ? `User: ${ev.userId}` : ""}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-mono text-zinc-500">
+                        {new Date(ev.timestamp).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-zinc-200 font-medium leading-relaxed">
+                      {ev.memory}
+                    </p>
+                  </div>
+                ))}
+
+              {mem0Events.filter((ev) => mem0Filter === "ALL" || ev.event === mem0Filter).length === 0 && (
+                <div className="text-center py-12 text-zinc-500 text-xs">
+                  No {mem0Filter !== "ALL" ? mem0Filter : ""} mutation events recorded in buffer.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

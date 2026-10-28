@@ -29,6 +29,12 @@ export interface DialogueBubbleMessage {
   reasoning?: string;
   alternatives?: string[];
   activeAltIndex?: number;
+  mem0Decisions?: {
+    event: "ADD" | "UPDATE" | "DELETE" | "NONE";
+    factText: string;
+    reason: string;
+    targetId?: string;
+  }[];
 }
 
 interface SaanDialogueBubbleProps {
@@ -376,6 +382,39 @@ export function SaanDialogueBubble({
                 <Undo2 className="h-3 w-3" /> Rollback
               </button>
             )}
+          </div>
+        )}
+
+        {/* Mem0 4-State Mutation Chips */}
+        {message.mem0Decisions && message.mem0Decisions.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {message.mem0Decisions.map((dec, idx) => (
+              <span
+                key={idx}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono border ${
+                  dec.event === "ADD"
+                    ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                    : dec.event === "UPDATE"
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                    : dec.event === "DELETE"
+                    ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+                    : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                }`}
+                title={`Mem0 Decision Reason: ${dec.reason}`}
+              >
+                <span>
+                  {dec.event === "ADD"
+                    ? "➕"
+                    : dec.event === "UPDATE"
+                    ? "🔄"
+                    : dec.event === "DELETE"
+                    ? "❌"
+                    : "⚪"}
+                </span>
+                <span className="font-bold">{dec.event}</span>
+                <span className="truncate max-w-[180px]">{dec.factText}</span>
+              </span>
+            ))}
           </div>
         )}
       </div>

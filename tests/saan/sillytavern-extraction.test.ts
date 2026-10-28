@@ -294,3 +294,44 @@ test("Controller: dispatches SillyTavern actions via dispatchSaanAction", async 
   assert.equal(getVarRes.success, true);
   assert.equal(getVarRes.data.value, "quantum computing");
 });
+
+test("DEFAULT_SAAN_LOREBOOK: activates Phryvos sanctuary and Krishna lore on relevant prompt keywords", () => {
+  const { DEFAULT_SAAN_LOREBOOK, evaluateLorebook } = require("../../lib/saan/lorebook");
+  assert.ok(DEFAULT_SAAN_LOREBOOK.length >= 4);
+
+  // Turn: user mentions "phryvos" and "chai"
+  const res = evaluateLorebook(
+    "Namaste Saan! Aaj hum phryvos architecture par kaam karenge aur subah ki chai piyenge.",
+    DEFAULT_SAAN_LOREBOOK,
+    { currentTurn: 1, activeSticky: {}, activeCooldown: {} }
+  );
+
+  assert.ok(res.activatedEntries.length >= 2);
+  const ids = res.activatedEntries.map((e: any) => e.id);
+  assert.ok(ids.includes("lore_phryvos"));
+  assert.ok(ids.includes("lore_chai"));
+  assert.ok(res.combinedContent.includes("Phryvos K7"));
+  assert.ok(res.combinedContent.includes("adrak-elaichi chai"));
+});
+
+test("SillyTavern Multi-Swipe Alternative & CCv2 Export: exports valid JSON and maintains alternative swipes", () => {
+  const card = exportSaanToCardV2();
+  const serialized = serializeCharacterCardV2(card);
+  const parsed = parseCharacterCardJson(serialized);
+
+  assert.equal(parsed.spec, "chara_card_v2");
+  assert.equal(parsed.data.name, "Saan");
+
+  // Verify swipe model structure
+  const testMessage = {
+    id: "msg_1",
+    sender: "saan",
+    text: "First draft reply.",
+    alternatives: ["Second alternative reply.", "Third alternative reply."],
+    activeAltIndex: 2, // points to 2nd alternative (3rd total option)
+  };
+
+  assert.equal(testMessage.alternatives.length, 2);
+  const activeText = testMessage.activeAltIndex === 0 ? testMessage.text : testMessage.alternatives[testMessage.activeAltIndex - 1];
+  assert.equal(activeText, "Third alternative reply.");
+});

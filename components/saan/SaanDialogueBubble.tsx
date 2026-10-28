@@ -13,6 +13,7 @@ import {
   Check,
   ChevronLeft,
   Heart,
+  RotateCw,
 } from "lucide-react";
 import { splitBurst } from "@/lib/saan/humanize";
 
@@ -36,6 +37,7 @@ interface SaanDialogueBubbleProps {
   onReact?: (messageId: string, emoji: string) => void;
   onRollback?: (snapshotId: string) => void;
   onSwipeAlternative?: (messageId: string, newIndex: number) => void;
+  onRegenerateSwipe?: (messageId: string) => void;
 }
 
 /**
@@ -123,21 +125,34 @@ export function SaanDialogueBubble({
   onReact,
   onRollback,
   onSwipeAlternative,
+  onRegenerateSwipe,
 }: SaanDialogueBubbleProps) {
   const isUser = message.sender === "user";
   const [expandedThought, setExpandedThought] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [userSelectedReaction, setUserSelectedReaction] = React.useState<string | null>(null);
 
+  const currentAltIndex = message.activeAltIndex ?? 0;
+  const totalAlts = (message.alternatives?.length ?? 0) + 1;
+
+  // Pick active text based on activeAltIndex (SillyTavern Multi-Swipe Buffer)
+  const activeText = React.useMemo(() => {
+    if (isUser || currentAltIndex === 0) return message.text;
+    if (message.alternatives && message.alternatives[currentAltIndex - 1]) {
+      return message.alternatives[currentAltIndex - 1];
+    }
+    return message.text;
+  }, [message.text, message.alternatives, currentAltIndex, isUser]);
+
   // Split text into natural conversational bursts if not already pre-split
   const bubbleList = React.useMemo(() => {
-    if (isUser) return [message.text];
-    if (message.bubbles && message.bubbles.length > 0) return message.bubbles;
-    return splitBurst(message.text, 3);
-  }, [message.text, message.bubbles, isUser]);
+    if (isUser) return [activeText];
+    if (currentAltIndex === 0 && message.bubbles && message.bubbles.length > 0) return message.bubbles;
+    return splitBurst(activeText, 3);
+  }, [activeText, message.bubbles, currentAltIndex, isUser]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(message.text);
+    navigator.clipboard.writeText(activeText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -146,9 +161,6 @@ export function SaanDialogueBubble({
     setUserSelectedReaction(emoji);
     onReact?.(message.id, emoji);
   };
-
-  const currentAltIndex = message.activeAltIndex ?? 0;
-  const totalAlts = (message.alternatives?.length ?? 0) + 1;
 
   if (isUser) {
     return (
@@ -219,34 +231,49 @@ export function SaanDialogueBubble({
                     <Sparkles className="h-3.5 w-3.5" /> Saan
                   </span>
 
-                  {/* Swipe Alternatives Controls (< 1/3 >) */}
-                  {totalAlts > 1 && (
-                    <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-400">
-                      <button
-                        type="button"
-                        disabled={currentAltIndex <= 0}
-                        onClick={() =>
-                          onSwipeAlternative?.(message.id, currentAltIndex - 1)
-                        }
-                        className="hover:text-purple-300 disabled:opacity-30"
-                      >
-                        <ChevronLeft className="w-3 h-3" />
-                      </button>
-                      <span>
-                        {currentAltIndex + 1}/{totalAlts}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={currentAltIndex >= totalAlts - 1}
-                        onClick={() =>
-                          onSwipeAlternative?.(message.id, currentAltIndex + 1)
-                        }
-                        className="hover:text-purple-300 disabled:opacity-30"
-                      >
-                        <ChevronRight className="w-3 h-3" />
-                      </button>
-                    </div>
-                  )}
+                  {/* Swipe Alternatives Controls (< 1/3 > + Regenerate) */}
+                  <div className="flex items-center gap-1 bg-zinc-950 px-2 py-0.5 rounded-lg border border-zinc-800 text-[10px] text-zinc-400">
+                    {totalAlts > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={currentAltIndex <= 0}
+                          onClick={() =>
+                            onSwipeAlternative?.(message.id, currentAltIndex - 1)
+                          }
+                          className="hover:text-purple-300 disabled:opacity-30 cursor-pointer"
+                          title="Previous alternative"
+                        >
+                          <ChevronLeft className="w-3 h-3" />
+                        </button>
+                        <span>
+                          {currentAltIndex + 1}/{totalAlts}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={currentAltIndex >= totalAlts - 1}
+                          onClick={() =>
+                            onSwipeAlternative?.(message.id, currentAltIndex + 1)
+                          }
+                          className="hover:text-purple-300 disabled:opacity-30 cursor-pointer"
+                          title="Next alternative"
+                        >
+                          <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => onRegenerateSwipe?.(message.id)}
+                      className={`inline-flex items-center gap-1 hover:text-purple-300 text-zinc-400 text-[10px] cursor-pointer ${
+                        totalAlts > 1 ? "ml-1 pl-1.5 border-l border-zinc-800" : ""
+                      }`}
+                      title="Generate new alternative reply (Swipe 🔄)"
+                    >
+                      <RotateCw className="w-2.5 h-2.5" />
+                      <span>Swipe</span>
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -277,14 +304,24 @@ export function SaanDialogueBubble({
 
                 {/* Quick Interactive Actions */}
                 <div className="flex items-center gap-2">
-                  {/* TTS Voice Replay */}
+                  {/* TTS Voice Replay (Active Alternative) */}
                   <button
                     type="button"
-                    onClick={() => onSpeak?.(message.text)}
+                    onClick={() => onSpeak?.(activeText)}
                     className="p-1 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-purple-300 transition"
-                    title="Speak message out loud"
+                    title="Speak active swipe out loud"
                   >
                     <Volume2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {/* Regenerate Swipe */}
+                  <button
+                    type="button"
+                    onClick={() => onRegenerateSwipe?.(message.id)}
+                    className="p-1 rounded-md hover:bg-zinc-800 text-zinc-400 hover:text-purple-300 transition"
+                    title="Regenerate alternative response (Swipe 🔄)"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
                   </button>
 
                   {/* Copy message */}

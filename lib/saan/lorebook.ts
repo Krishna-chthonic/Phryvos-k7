@@ -224,3 +224,56 @@ export function evaluateLorebook(
     updatedState: nextState,
   };
 }
+
+/**
+ * Sovereign Default Lorebook Entries for Saan & Krishna Sanctuary
+ */
+export const DEFAULT_SAAN_LOREBOOK: LoreEntry[] = [
+  {
+    id: "lore_phryvos",
+    keys: ["phryvos", "k7", "sanctuary", "architecture", "cockpit"],
+    content: "Phryvos K7 is an offline-first sovereign companion and cognitive operating sanctuary designed by Krishna with absolute zero-cloud privacy.",
+    order: 100,
+    stickyTurns: 2,
+  },
+  {
+    id: "lore_krishna",
+    keys: ["krishna", "creator", "architect"],
+    content: "Krishna is the creator and architect of Phryvos K7. He values high engineering craftsmanship, unyielding sovereign independence, and authentic warmth.",
+    order: 95,
+  },
+  {
+    id: "lore_chai",
+    keys: ["chai", "tea", "subah", "morning"],
+    content: "Subah ki adrak-elaichi chai is an essential grounding ritual between Krishna and Saan. It signifies calm wakefulness, deep presence, and starting the day right.",
+    order: 80,
+  },
+  {
+    id: "lore_deep_focus",
+    keys: ["focus", "coding", "sprint", "pomodoro", "study"],
+    content: "Deep focus sprints are 25-minute periods of sacred distraction-free concentration. Saan acts as an attentive, supportive pair-programmer and guardian of Krishna's mental energy.",
+    order: 85,
+    stickyTurns: 1,
+  },
+  {
+    id: "lore_vault",
+    keys: ["vault", "secret", "flashbulb", "memory"],
+    content: "The Flashbulb Vault holds unbreakable emotional milestone memories between Saan and Krishna that never decay or fade across time.",
+    order: 90,
+  },
+];
+
+// Persistent runtime turn state for the active session
+let activeLorebookState: LorebookTurnState = {
+  currentTurn: 0,
+  activeSticky: {},
+  activeCooldown: {},
+};
+
+export function getActiveLorebookState(): LorebookTurnState {
+  return { ...activeLorebookState };
+}
+
+export function setActiveLorebookState(state: LorebookTurnState): void {
+  activeLorebookState = { ...state };
+}

@@ -30,6 +30,17 @@ import { reinforceMemory } from "@/lib/saan/auto-promote";
 import { formatTimePrefix } from "@/lib/saan/airi-datetime";
 import { categorizeResponse } from "@/lib/saan/airi-reasoning";
 import { parseStreamingControlTokens } from "@/lib/saan/airi-streaming-control";
+import {
+  evaluateLorebook,
+  DEFAULT_SAAN_LOREBOOK,
+  getActiveLorebookState,
+  setActiveLorebookState,
+} from "@/lib/saan/lorebook";
+import {
+  exportSaanToCardV2,
+  serializeCharacterCardV2,
+  parseCharacterCardJson,
+} from "@/lib/saan/character-card";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { substituteMacros } from "@/lib/saan/macro-engine";
 import { insertPromptsAtDepth } from "@/lib/saan/depth-injector";
@@ -59,6 +70,26 @@ export async function POST(req: NextRequest) {
     if (body.type === "action" && body.action) {
       const actionRes = await dispatchSaanAction(body.action, body.params || {});
       return NextResponse.json({ ok: actionRes.success, actionResult: actionRes });
+    }
+
+    // SillyTavern CharacterCard V2/V3 Export
+    if (body.type === "export_card") {
+      const card = exportSaanToCardV2();
+      return NextResponse.json({
+        ok: true,
+        card,
+        json: serializeCharacterCardV2(card),
+      });
+    }
+
+    // SillyTavern CharacterCard V2/V3 Import
+    if (body.type === "import_card" && body.cardData) {
+      const parsed = parseCharacterCardJson(body.cardData);
+      return NextResponse.json({
+        ok: true,
+        message: `Loaded character card '${parsed.data.name}' successfully!`,
+        card: parsed,
+      });
     }
 
     const rawUserMessage = body.message;
@@ -122,12 +153,20 @@ export async function POST(req: NextRequest) {
       systemPrompt += `\n\n${directorNote}`;
     }
 
-    // SillyTavern Macro substitution on system prompt
+    // SillyTavern Macro substitution on system prompt (with idle duration support)
+    const lastTimestamp = body.lastTimestamp ? Number(body.lastTimestamp) : (Date.now() - 3600_000);
     systemPrompt = substituteMacros(systemPrompt, {
       charName: "Saan",
       userName: "Krishna",
       lastUserMessage: rawUserMessage,
+      lastInteractionTimestamp: lastTimestamp,
     });
+
+    // SillyTavern World Info / Lorebook Selective Engine
+    const currentTurnState = getActiveLorebookState();
+    currentTurnState.currentTurn = history.length;
+    const lorebookResult = evaluateLorebook(rawUserMessage, DEFAULT_SAAN_LOREBOOK, currentTurnState);
+    setActiveLorebookState(lorebookResult.updatedState);
 
     // Airi temporal anchor prefix for user turns
     const timeStampedUserMessage = `${formatTimePrefix()}${spokenNarrative}`;
@@ -138,10 +177,25 @@ export async function POST(req: NextRequest) {
       { role: "user" as const, content: timeStampedUserMessage },
     ];
 
-    // SillyTavern Context Depth Injection (Author's Note @ depth 2)
+    // SillyTavern Context Depth Injection (Author's Note & Active Lore @ depth 2)
+    const depthInjections = [];
+    if (lorebookResult.combinedContent) {
+      depthInjections.push({
+        id: "lorebook_active",
+        content: `[ACTIVE WORLD INFO / LOREBOOK ANCHORS]:\n${lorebookResult.combinedContent}`,
+        role: "system" as const,
+        depth: 2,
+        order: 90,
+      });
+    }
+
     const anInjection = getAuthorsNoteInjection(history.length);
     if (anInjection) {
-      messages = insertPromptsAtDepth(messages, [anInjection]);
+      depthInjections.push(anInjection);
+    }
+
+    if (depthInjections.length > 0) {
+      messages = insertPromptsAtDepth(messages, depthInjections);
     }
 
     // SillyTavern Consecutive Role Merge Engine (strict turn alternation)
@@ -325,6 +379,7 @@ export async function POST(req: NextRequest) {
       thoughts,
       plans,
       controls: streamingControls.controls,
+      lorebookActivated: lorebookResult.activatedEntries.map((e) => e.id),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

@@ -18,6 +18,8 @@ import {
   Brain,
   Timer,
   Sun,
+  Download,
+  Upload,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
@@ -489,6 +491,114 @@ export function SaanStageChatView({
     } catch {}
   };
 
+  // SillyTavern Multi-Swipe Alternative Switcher
+  const handleSwipeAlternative = (messageId: string, newIndex: number) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, activeAltIndex: newIndex } : m
+      )
+    );
+  };
+
+  // SillyTavern Multi-Swipe Alternative Generation (Regenerate Turn)
+  const handleRegenerateSwipe = async (targetMsgId: string) => {
+    const msgIndex = messages.findIndex((m) => m.id === targetMsgId);
+    if (msgIndex === -1) return;
+
+    const precedingUser = [...messages.slice(0, msgIndex)].reverse().find((m) => m.sender === "user");
+    const userQuery = precedingUser?.text || "Please give me an alternative thought on this!";
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userQuery,
+          history: messages.slice(0, msgIndex).map((m) => ({
+            role: m.sender === "user" ? "user" : "assistant",
+            content: m.text,
+          })),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.reply) {
+        let cleanReply = data.reply;
+        const thinkMatch = data.reply.match(/<think>([\s\S]*?)<\/think>/i);
+        if (thinkMatch) {
+          cleanReply = data.reply.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        }
+
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== targetMsgId) return m;
+            const currentAlts = m.alternatives || [];
+            const nextAlts = [...currentAlts, cleanReply];
+            return {
+              ...m,
+              alternatives: nextAlts,
+              activeAltIndex: nextAlts.length, // switch to newly generated swipe
+            };
+          })
+        );
+      }
+    } catch (err) {
+      console.error("Failed to generate swipe:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // SillyTavern CharacterCard V2 Export
+  const handleExportCard = async () => {
+    try {
+      const res = await fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "export_card" }),
+      });
+      const data = await res.json();
+      if (data.ok && data.json) {
+        const blob = new Blob([data.json], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `saan-character-card-v2.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      alert("Failed to export Character Card");
+    }
+  };
+
+  // SillyTavern CharacterCard V2/V3 Import
+  const handleImportCard = () => {
+    const raw = prompt("Paste Character Card V2/V3 JSON or Persona Spec here:");
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      fetch("/api/saan/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "import_card", cardData: parsed }),
+      })
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.ok) {
+            alert(d.message || "Card imported successfully!");
+            onRefreshSoul?.();
+          } else {
+            alert(d.error || "Failed to import card");
+          }
+        });
+    } catch {
+      alert("Invalid JSON format provided.");
+    }
+  };
+
   // STT Toggle with Airi Audio Level VU simulation
   const toggleListening = () => {
     if (typeof window === "undefined") return;
@@ -669,6 +779,28 @@ export function SaanStageChatView({
                 <Zap className="w-3 h-3 text-cyan-400" />
                 <span className="hidden sm:inline">Nudge Beat</span>
               </button>
+
+              {/* SillyTavern: Export Character Card V2 */}
+              <button
+                type="button"
+                onClick={handleExportCard}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition cursor-pointer"
+                title="Export Saan Persona as SillyTavern Character Card V2"
+              >
+                <Download className="w-3 h-3 text-emerald-400" />
+                <span>Export CCv2</span>
+              </button>
+
+              {/* SillyTavern: Import Character Card V2/V3 */}
+              <button
+                type="button"
+                onClick={handleImportCard}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
+                title="Import SillyTavern Character Card (JSON)"
+              >
+                <Upload className="w-3 h-3 text-indigo-400" />
+                <span>Import Card</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -771,6 +903,8 @@ export function SaanStageChatView({
             onSpeak={(text) => speakText(text, m.id)}
             onReact={handleUserReaction}
             onRollback={handleRollback}
+            onSwipeAlternative={handleSwipeAlternative}
+            onRegenerateSwipe={handleRegenerateSwipe}
           />
         ))}
 

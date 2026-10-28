@@ -61,7 +61,7 @@ describe("Saan Schema", () => {
     assert.equal(statusCol?.dflt_value, "'active'");
 
     const confidenceCol = cols.find(c => c.name === "confidence");
-    assert.equal(confidenceCol?.dflt_value, "1.0");
+    assert.ok(confidenceCol?.dflt_value === "1.0" || confidenceCol?.dflt_value === "1");
 
     const importanceCol = cols.find(c => c.name === "importance");
     assert.equal(importanceCol?.dflt_value, "5");

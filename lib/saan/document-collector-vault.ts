@@ -1,9 +1,12 @@
 /**
  * @file document-collector-vault.ts
  * @description Clean-room TypeScript adaptation of Anything-LLM's document collector,
- * metadata sanitization, and semantic text chunking.
- * Inspired by Mintplex-Labs/anything-llm (0941fb0).
+ * metadata normalization, JavaScript epoch 1970 bug defense, Obsidian wikilink parsing,
+ * and semantic text chunking.
+ * Inspired by Mintplex-Labs/anything-llm (0941fb0, MIT).
  */
+
+import { createHash } from 'crypto';
 
 export interface DocumentMetadata {
   title: string;
@@ -20,6 +23,8 @@ export interface DocumentChunk {
   text: string;
   wordCount: number;
   tokenCountEstimate: number;
+  checksum: string;
+  wikilinks?: string[];
 }
 
 export interface IngestedDocument {
@@ -34,29 +39,46 @@ export interface IngestedDocument {
   wordCount: number;
   tokenCountEstimate: number;
   chunks: DocumentChunk[];
+  detectedWikilinks: string[];
 }
 
 export class DocumentCollector {
   /**
-   * Slugifies strings into safe ASCII identifiers.
+   * Slugifies strings into safe lowercase ASCII identifiers, stripping file extensions.
    */
   public slugify(text: string): string {
-    return text
+    const withoutExt = text.includes('.') ? text.split('.').slice(0, -1).join('-') : text;
+    return withoutExt
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+      .replace(/^-+|-+$/g, '') || 'untitled';
   }
 
   /**
-   * Normalizes published metadata safely avoiding 1970 epoch fallback bugs on falsy values.
+   * Calculates deterministic SHA-256 checksum for byte or string payloads.
    */
-  public normalizePublishedDate(val?: string | number | null): string {
-    if (val === null || val === undefined || typeof val === 'boolean' || `${val}`.trim() === '') {
+  public calculateChecksum(content: string): string {
+    return createHash('sha256').update(content).digest('hex');
+  }
+
+  /**
+   * Normalizes the `published` metadata key into a locale/ISO date string.
+   * Defends against JavaScript's `Number(falsy)` coercion bug which turns
+   * null, boolean, whitespace, or empty arrays into 0 (epoch 1970).
+   */
+  public normalizePublishedDate(val?: unknown): string {
+    if (
+      val === null ||
+      val === undefined ||
+      typeof val === 'boolean' ||
+      (typeof val === 'object' && Array.isArray(val)) ||
+      `${val}`.trim() === ''
+    ) {
       return new Date().toISOString();
     }
 
     const num = Number(val);
-    if (!isNaN(num) && num > 0) {
+    if (!isNaN(num) && isFinite(num)) {
       const d = new Date(num);
       if (!isNaN(d.getTime())) return d.toISOString();
     }
@@ -68,68 +90,120 @@ export class DocumentCollector {
   }
 
   /**
-   * Ingests and normalizes raw text documents and splits into searchable chunks.
+   * Normalizes URL metadata key into a web URI or local file scheme.
+   */
+  public normalizeUrl(url: string | undefined, title: string): string {
+    if (url && typeof url === 'string') {
+      try {
+        const u = new URL(url);
+        if (['http:', 'https:'].includes(u.protocol)) {
+          return `web://${url.toLowerCase()}.website`;
+        }
+      } catch {
+        // Fall back to file scheme
+      }
+    }
+    return `file://${this.slugify(title)}.txt`;
+  }
+
+  /**
+   * Parses Obsidian-style wikilinks: `[[Target]]` or `[[Target|Alias]]`.
+   */
+  public extractWikilinks(text: string): string[] {
+    const regex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+    const links: string[] = [];
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(text)) !== null) {
+      const target = match[1].trim();
+      if (target && !links.includes(target)) {
+        links.push(target);
+      }
+    }
+    return links;
+  }
+
+  /**
+   * Ingests and normalizes raw text documents and splits into searchable chunks
+   * with paragraph boundaries and token estimation.
    */
   public processRawText(
     textContent: string,
     metadata: DocumentMetadata,
-    options: { maxChunkWords?: number } = {}
+    options: { maxChunkWords?: number; overlapWords?: number } = {}
   ): IngestedDocument {
     if (!textContent || typeof textContent !== 'string') {
       throw new Error('textContent must be a non-empty string');
     }
 
-    const title = metadata?.title || 'Untitled Document';
-    const slug = this.slugify(title);
-    const id = `doc_${slug}_${Date.now()}`;
+    if (!metadata?.title || typeof metadata.title !== 'string') {
+      throw new Error('metadata.title must be a non-empty string');
+    }
 
-    // Normalize metadata
-    const url = metadata.url || `file://${slug}.txt`;
-    const docAuthor = metadata.docAuthor || 'Anonymous';
-    const description = metadata.description || 'No description found';
-    const docSource = metadata.docSource || 'vault';
-    const chunkSource = metadata.chunkSource || `${slug}.txt`;
+    const titleSlug = this.slugify(metadata.title);
+    const id = `doc_${titleSlug}_${Date.now()}`;
+
+    const title = metadata.title;
+    const filename = `${titleSlug}.txt`;
+    const url = this.normalizeUrl(metadata.url, metadata.title);
+    const docAuthor = typeof metadata.docAuthor === 'string' ? metadata.docAuthor : 'no author specified';
+    const description = typeof metadata.description === 'string' ? metadata.description : 'no description found';
+    const docSource = typeof metadata.docSource === 'string' ? metadata.docSource : 'no source set';
+    const chunkSource = typeof metadata.chunkSource === 'string' ? metadata.chunkSource : `${titleSlug}.txt`;
     const published = this.normalizePublishedDate(metadata.published);
 
     const words = textContent.split(/\s+/).filter(Boolean);
     const wordCount = words.length;
     const tokenCountEstimate = Math.ceil(textContent.length / 4);
 
-    // Chunking logic
+    const allWikilinks = this.extractWikilinks(textContent);
+
+    // Paragraph-based chunking with word limit
     const maxWords = options.maxChunkWords || 150;
+    const overlap = options.overlapWords || 0;
+    const rawParagraphs = textContent.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+
     const chunks: DocumentChunk[] = [];
+    let currentWords: string[] = [];
+    let currentText = '';
 
-    // Split along double-newline paragraphs first
-    const paragraphs = textContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-    let currentChunkWords: string[] = [];
-    let chunkIndex = 0;
+    for (const paragraph of rawParagraphs) {
+      const pWords = paragraph.split(/\s+/).filter(Boolean);
 
-    for (const para of paragraphs) {
-      const paraWords = para.split(/\s+/).filter(Boolean);
-      if (currentChunkWords.length + paraWords.length <= maxWords) {
-        currentChunkWords.push(...paraWords);
-      } else {
-        if (currentChunkWords.length > 0) {
-          const chunkText = currentChunkWords.join(' ');
-          chunks.push({
-            chunkIndex: chunkIndex++,
-            text: chunkText,
-            wordCount: currentChunkWords.length,
-            tokenCountEstimate: Math.ceil(chunkText.length / 4),
-          });
-          currentChunkWords = [];
+      if (currentWords.length + pWords.length > maxWords && currentWords.length > 0) {
+        const text = currentText.trim();
+        chunks.push({
+          chunkIndex: chunks.length,
+          text,
+          wordCount: currentWords.length,
+          tokenCountEstimate: Math.ceil(text.length / 4),
+          checksum: this.calculateChecksum(text),
+          wikilinks: this.extractWikilinks(text),
+        });
+
+        // Retain overlap if requested
+        if (overlap > 0 && currentWords.length > overlap) {
+          const overlapSlice = currentWords.slice(-overlap);
+          currentWords = [...overlapSlice, ...pWords];
+          currentText = overlapSlice.join(' ') + '\n\n' + paragraph;
+        } else {
+          currentWords = [...pWords];
+          currentText = paragraph;
         }
-        currentChunkWords.push(...paraWords);
+      } else {
+        currentWords.push(...pWords);
+        currentText = currentText ? `${currentText}\n\n${paragraph}` : paragraph;
       }
     }
 
-    if (currentChunkWords.length > 0) {
-      const chunkText = currentChunkWords.join(' ');
+    if (currentWords.length > 0) {
+      const text = currentText.trim();
       chunks.push({
-        chunkIndex: chunkIndex++,
-        text: chunkText,
-        wordCount: currentChunkWords.length,
-        tokenCountEstimate: Math.ceil(chunkText.length / 4),
+        chunkIndex: chunks.length,
+        text,
+        wordCount: currentWords.length,
+        tokenCountEstimate: Math.ceil(text.length / 4),
+        checksum: this.calculateChecksum(text),
+        wikilinks: this.extractWikilinks(text),
       });
     }
 
@@ -144,12 +218,8 @@ export class DocumentCollector {
       published,
       wordCount,
       tokenCountEstimate,
-      chunks: chunks.length > 0 ? chunks : [{
-        chunkIndex: 0,
-        text: textContent,
-        wordCount,
-        tokenCountEstimate,
-      }],
+      chunks,
+      detectedWikilinks: allWikilinks,
     };
   }
 }

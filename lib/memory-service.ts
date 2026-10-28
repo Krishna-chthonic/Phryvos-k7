@@ -84,9 +84,9 @@ export function addMemory(
   const now = Date.now();
   const res = db
     .prepare(
-      "INSERT INTO memories (point, category, source_session_id, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO memories (point, category, source_session_id, source, valid_since, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(cleanPoint, category, sourceSessionId, source, now, now);
+    .run(cleanPoint, category, sourceSessionId, source, now, now, now);
 
   const id = Number(res.lastInsertRowid);
   return {

@@ -22,6 +22,9 @@ export function runPhase4Benchmark(): void {
   console.log("=== Running Phase 4 Memory Benchmark & Latency Stress Test ===");
   const db = getDb();
 
+  // Clean up any stale synthetic benchmark data from prior runs before starting
+  db.prepare("DELETE FROM saan_memories WHERE point LIKE 'User profile metric #%'").run();
+
   const NUM_FACTS = 50;
   const categories: Array<"fact" | "preference" | "promise" | "general"> = ["fact", "preference", "promise", "general"];
 
@@ -45,7 +48,7 @@ export function runPhase4Benchmark(): void {
     const start = performance.now();
 
     // Query active memories
-    const active = getSaanMemories(250);
+    const active = getSaanMemories(500);
     const end = performance.now();
     latencies.push(end - start);
 

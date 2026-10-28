@@ -77,6 +77,28 @@ import {
   computeJitter,
   type HumanInterruptConfig,
 } from "./resilient-state-lease";
+import {
+  MetasearchAggregator,
+  type RawSearchResult,
+  type AggregatedSearchResult,
+  normalizeSearchUrl,
+  calculateRankScore,
+} from "./metasearch-aggregator";
+import {
+  CleanMarkdownScraper,
+  type ScrapeCleanOptions,
+  type CleanMarkdownResult,
+} from "./clean-markdown-scraper";
+import {
+  WebSecurityFence,
+  type FenceResult,
+  type ChunkOptions,
+} from "./web-security-fence";
+import {
+  AccessibilityTreeParser,
+  type AccessibilityTreeResult,
+  type InteractiveElement,
+} from "./accessibility-tree-parser";
 
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
@@ -89,6 +111,10 @@ export const globalIdempotencyEngine = new IdempotencyBackoffEngine();
 export const globalThreadCheckpointer = new SqliteThreadCheckpointer();
 export const globalLeaseManager = new LeaseLockManager();
 export const globalPresenceEngine = new HonestPresenceEngine();
+export const globalMetasearchAggregator = new MetasearchAggregator();
+export const globalMarkdownScraper = new CleanMarkdownScraper();
+export const globalWebSecurityFence = new WebSecurityFence();
+export const globalAccessibilityParser = new AccessibilityTreeParser();
 
 export interface SaanActionResult {
   success: boolean;
@@ -206,6 +232,10 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_thread_history":
     case "acquire_lease_lock":
     case "check_honest_presence":
+    case "aggregate_metasearch":
+    case "clean_web_markdown":
+    case "fence_web_content":
+    case "parse_accessibility_tree":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -1795,6 +1825,89 @@ export function checkHonestPresenceAction(
 }
 
 /**
+ * Metasearch Aggregation & Reciprocal Rank Scoring (SearXNG/Khoj)
+ */
+export function aggregateMetasearchAction(
+  rawResults: RawSearchResult[],
+  engineWeights?: Record<string, number>,
+  priority: 'low' | 'normal' | 'high' = 'normal'
+): SaanActionResult {
+  try {
+    const results = globalMetasearchAggregator.aggregate(rawResults, engineWeights, priority);
+    return {
+      success: true,
+      action: "aggregate_metasearch",
+      tier: 1,
+      message: `Aggregated and scored ${results.length} unique search results across engines`,
+      data: { count: results.length, results },
+    };
+  } catch (err: any) {
+    return { success: false, action: "aggregate_metasearch", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Clean Web Markdown Scraping & Boilerplate Removal (Firecrawl)
+ */
+export function cleanWebMarkdownAction(
+  rawHtml: string,
+  options?: ScrapeCleanOptions
+): SaanActionResult {
+  try {
+    const result = globalMarkdownScraper.cleanAndConvert(rawHtml, options);
+    return {
+      success: true,
+      action: "clean_web_markdown",
+      tier: 1,
+      message: `Extracted ${result.markdown.length} chars of clean markdown with ${result.extractedLinks.length} links`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "clean_web_markdown", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Web Security Nonce-Isolated Fencing & Prompt Injection Defense (Crawl4AI)
+ */
+export function fenceWebContentAction(
+  rawText: string,
+  url: string,
+  title?: string
+): SaanActionResult {
+  try {
+    const result = globalWebSecurityFence.fenceWebContent(rawText, { url, title });
+    return {
+      success: true,
+      action: "fence_web_content",
+      tier: 1,
+      message: result.isSafe ? `Content safely fenced with nonce ${result.nonce}` : `Threats detected in web content: ${result.detectedThreats.join(", ")}`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "fence_web_content", tier: 1, message: err.message };
+  }
+}
+
+/**
+ * Indexed Accessibility Tree Parsing (browser-use)
+ */
+export function parseAccessibilityTreeAction(html: string): SaanActionResult {
+  try {
+    const result = globalAccessibilityParser.parse(html);
+    return {
+      success: true,
+      action: "parse_accessibility_tree",
+      tier: 1,
+      message: `Parsed ${result.interactiveCount} interactive elements into indexed accessibility tree`,
+      data: result,
+    };
+  } catch (err: any) {
+    return { success: false, action: "parse_accessibility_tree", tier: 1, message: err.message };
+  }
+}
+
+/**
  * Universal Action Dispatcher
  */
 export async function dispatchSaanAction(action: string, params: any = {}): Promise<SaanActionResult> {
@@ -1929,6 +2042,14 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return acquireLeaseLockAction(params.resource, params.owner, params.ttlMs);
     case "check_honest_presence":
       return checkHonestPresenceAction(params.lastHeartbeatMs, params.currentMs);
+    case "aggregate_metasearch":
+      return aggregateMetasearchAction(params.rawResults, params.engineWeights, params.priority);
+    case "clean_web_markdown":
+      return cleanWebMarkdownAction(params.rawHtml, params.options);
+    case "fence_web_content":
+      return fenceWebContentAction(params.rawText, params.url, params.title);
+    case "parse_accessibility_tree":
+      return parseAccessibilityTreeAction(params.html);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }
@@ -1938,12 +2059,16 @@ export const SAAN_TOOLS_SPEC = `
 You have native access to execute project control commands. To execute an action, output an action block at the END of your message in this JSON format:
 \`\`\`saan_action
 {
-  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence",
+  "action": "create_task" | "list_tasks" | "complete_task" | "create_event" | "list_events" | "create_goal" | "search_web" | "remember_date" | "list_dates" | "add_wish" | "fulfill_wish" | "list_wishes" | "get_mindfulness" | "consolidate_memories" | "list_deeds" | "resolve_deed" | "get_self_model" | "get_cognitive_state" | "run_huginn_scan" | "add_lesson" | "reframe_memory" | "relive_memory" | "get_memory_graph" | "get_starter_chips" | "transform_speech_text" | "categorize_text" | "parse_streaming_controls" | "map_avatar_expression" | "handle_avatar_tap" | "normalize_speakable_text" | "get_rms_volume_envelope" | "parse_character_card" | "export_character_card" | "evaluate_lorebook" | "substitute_macros" | "get_authors_note" | "get_chat_variable" | "set_chat_variable" | "get_token_budget" | "query_graph_memory" | "test_provider_cascade" | "apply_mem0_decision" | "edit_core_memory" | "query_temporal_graph" | "parse_temporal_query" | "get_running_summary" | "flush_buffered_memories" | "export_gnosys_snapshot" | "import_gnosys_snapshot" | "get_budgeted_profile" | "link_memory_to_task" | "query_associated_memories" | "evaluate_memory_verdict" | "match_trigger_phrases" | "generate_proactive_briefing" | "parse_dirty_json" | "create_action_event" | "request_interactive_approval" | "run_research_planner" | "check_schedule_conflict" | "execute_idempotent_task" | "save_thread_checkpoint" | "get_thread_history" | "acquire_lease_lock" | "check_honest_presence" | "aggregate_metasearch" | "clean_web_markdown" | "fence_web_content" | "parse_accessibility_tree",
   "params": { ... }
 }
 \`\`\`
 
 Params guide:
+- aggregate_metasearch: { "rawResults": [{ "title": "Example", "url": "https://example.com", "content": "Text", "engine": "searxng", "position": 1 }] }
+- clean_web_markdown: { "rawHtml": "<html><body><header>Nav</header><main><p>Content</p></main></body></html>" }
+- fence_web_content: { "rawText": "Scraped body", "url": "https://example.com", "title": "Example" }
+- parse_accessibility_tree: { "html": "<button>Click</button><a href='/home'>Home</a>" }
 - request_interactive_approval: { "command": "rm -rf build/", "workingDirectory": "/root/k7", "securityTier": 2 }
 - run_research_planner: { "query": "autonomous agents", "interruptInstruction": "focus on state machines" }
 - check_schedule_conflict: { "proposedStartAt": 1730000000000, "durationMs": 3600000, "existingSlots": [] }

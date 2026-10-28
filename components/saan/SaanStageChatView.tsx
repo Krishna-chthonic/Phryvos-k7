@@ -14,6 +14,8 @@ import {
   BookmarkCheck,
   Film,
   Zap,
+  Flame,
+  Brain,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
@@ -22,6 +24,8 @@ import { SaanAffectionBar } from "./SaanAffectionBar";
 import { SaanWorkingMemoryCapsule } from "./SaanWorkingMemoryCapsule";
 import { SaanConsequenceTracker, type DeedItem } from "./SaanConsequenceTracker";
 import { SaanStoryRecapModal } from "./SaanStoryRecapModal";
+import { SaanFlashbulbVault, type FlashbulbMemory } from "./SaanFlashbulbVault";
+import { SaanHuginnRavenDashboard, type HuginnInsightItem } from "./SaanHuginnRavenDashboard";
 
 interface SaanStageChatViewProps {
   profile: any;
@@ -30,6 +34,8 @@ interface SaanStageChatViewProps {
   openDeedsCount?: number;
   activeArcs?: any[];
   storyRecap?: string;
+  flashbulbMemories?: FlashbulbMemory[];
+  huginnInsights?: HuginnInsightItem[];
   onRefreshSoul?: () => void;
   onNavigateTab?: (tab: "stage" | "persona" | "graph" | "soul" | "tools") => void;
 }
@@ -41,6 +47,8 @@ export function SaanStageChatView({
   openDeedsCount = 0,
   activeArcs = [],
   storyRecap,
+  flashbulbMemories = [],
+  huginnInsights = [],
   onRefreshSoul,
   onNavigateTab,
 }: SaanStageChatViewProps) {
@@ -48,9 +56,11 @@ export function SaanStageChatView({
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
-  // Modals for Chronicler systems
+  // Modals for Chronicler & Mimir neuro-cognitive systems
   const [isLedgerOpen, setIsLedgerOpen] = React.useState(false);
   const [isRecapOpen, setIsRecapOpen] = React.useState(false);
+  const [isFlashbulbOpen, setIsFlashbulbOpen] = React.useState(false);
+  const [isHuginnOpen, setIsHuginnOpen] = React.useState(false);
 
   // Audio & Waveform Visualization
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
@@ -303,6 +313,14 @@ export function SaanStageChatView({
     }
   };
 
+  // Mimir: Relive Flashbulb Memory
+  const handleReliveMemory = (mem: FlashbulbMemory) => {
+    setAvatarEmotion("blush");
+    handleSend(
+      `*Looks at Saan with warm, reflective eyes* Saan, wo moment yaad hai jab: "${mem.point}"? Aao us moment ko dobara relive karte hain!`
+    );
+  };
+
   // Chronicler Pacing Beat Request (Break Deadlock)
   const handleTriggerBeat = async () => {
     try {
@@ -434,10 +452,43 @@ export function SaanStageChatView({
             </div>
           </div>
 
-          {/* Chronicler Tools + Equalizer Waveform & Audio Controls */}
+          {/* Chronicler & Mimir Tools + Equalizer Waveform & Audio Controls */}
           <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
-            <div className="flex items-center gap-2">
-              {/* Chronicler: Consequence Ledger Drawer Button */}
+            {/* Top Toolbar: Chronicler & Mimir Superchargers */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              {/* Mimir: Flashbulb Memory Vault */}
+              <button
+                type="button"
+                onClick={() => setIsFlashbulbOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition shadow-xs"
+                title="View Flashbulb Memory Anchors (Never Decay)"
+              >
+                <Flame className="w-3.5 h-3.5 text-amber-400" />
+                <span>Flashbulb</span>
+                {flashbulbMemories.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/30 text-amber-200 font-mono font-bold">
+                    {flashbulbMemories.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Mimir: Huginn Thought Raven Insights */}
+              <button
+                type="button"
+                onClick={() => setIsHuginnOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition shadow-xs"
+                title="View Huginn Emergent Trajectories & Patterns"
+              >
+                <Brain className="w-3.5 h-3.5 text-purple-400" />
+                <span>Huginn Patterns</span>
+                {huginnInsights.length > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/30 text-purple-200 font-mono font-bold">
+                    {huginnInsights.length}
+                  </span>
+                )}
+              </button>
+
+              {/* Chronicler: Promises / Consequence Ledger */}
               <button
                 type="button"
                 onClick={() => setIsLedgerOpen(true)}
@@ -457,7 +508,7 @@ export function SaanStageChatView({
                 )}
               </button>
 
-              {/* Chronicler: Previously On... Story Recap Button */}
+              {/* Chronicler: Previously On... Story Recap */}
               <button
                 type="button"
                 onClick={() => setIsRecapOpen(true)}
@@ -644,7 +695,7 @@ export function SaanStageChatView({
         </form>
       </footer>
 
-      {/* Chronicler Interactive Modals */}
+      {/* Chronicler Modals */}
       <SaanConsequenceTracker
         deeds={deeds}
         isOpen={isLedgerOpen}
@@ -659,6 +710,23 @@ export function SaanStageChatView({
         activeArcs={activeArcs}
         openDeedsCount={openDeedsCount}
         onResumeChat={(text) => handleSend(text)}
+      />
+
+      {/* Mimir Neuro-Cognitive Modals */}
+      <SaanFlashbulbVault
+        isOpen={isFlashbulbOpen}
+        onClose={() => setIsFlashbulbOpen(false)}
+        memories={flashbulbMemories}
+        onRelive={handleReliveMemory}
+        onRefresh={() => onRefreshSoul?.()}
+      />
+
+      <SaanHuginnRavenDashboard
+        isOpen={isHuginnOpen}
+        onClose={() => setIsHuginnOpen(false)}
+        insights={huginnInsights}
+        onTriggerScan={() => onRefreshSoul?.()}
+        onFollowUp={(topic) => handleSend(`Saan, aao is baare mein baat karte hain: "${topic}"`)}
       />
     </div>
   );

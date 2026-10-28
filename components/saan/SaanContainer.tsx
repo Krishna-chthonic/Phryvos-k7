@@ -178,6 +178,8 @@ export function SaanContainer() {
             openDeedsCount={soulData.openDeedsCount || 0}
             activeArcs={soulData.activeArcs || []}
             storyRecap={soulData.storyRecap}
+            flashbulbMemories={soulData.flashbulbMemories || []}
+            huginnInsights={soulData.huginnInsights || []}
             onRefreshSoul={refreshSoulData}
             onNavigateTab={(tab) => setActiveTab(tab)}
           />
@@ -204,6 +206,8 @@ export function SaanContainer() {
             relationship={soulData.relationship}
             moodState={soulData.moodState}
             dreamFragments={soulData.dreamFragments || []}
+            flashbulbMemories={soulData.flashbulbMemories || []}
+            huginnInsights={soulData.huginnInsights || []}
             onRefresh={refreshSoulData}
           />
         )}

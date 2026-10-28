@@ -35,6 +35,8 @@ interface SaanMoodCompassViewProps {
   relationship: any;
   moodState: any;
   dreamFragments: any[];
+  flashbulbMemories?: any[];
+  huginnInsights?: any[];
   onRefresh: () => void;
 }
 
@@ -44,9 +46,11 @@ export function SaanMoodCompassView({
   relationship,
   moodState,
   dreamFragments,
+  flashbulbMemories = [],
+  huginnInsights = [],
   onRefresh,
 }: SaanMoodCompassViewProps) {
-  const [activeTab, setActiveTab] = React.useState<"compass" | "tree" | "diary">("compass");
+  const [activeTab, setActiveTab] = React.useState<"compass" | "tree" | "diary" | "neuro">("compass");
   const [newDiaryEntry, setNewDiaryEntry] = React.useState("");
   const [newDiaryMood, setNewDiaryMood] = React.useState("Thoughtful");
   const [savingDiary, setSavingDiary] = React.useState(false);
@@ -279,6 +283,17 @@ export function SaanMoodCompassView({
               }`}
             >
               Living Diary ({diary.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("neuro")}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === "neuro"
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              Neuro & Huginn ({flashbulbMemories.length})
             </button>
           </div>
         </div>
@@ -521,6 +536,81 @@ export function SaanMoodCompassView({
                   </div>
                   <p className="text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap select-text">
                     "{item.entry}"
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: NEURO ANCHORS & HUGINN PATTERNS */}
+      {activeTab === "neuro" && (
+        <div className="space-y-6">
+          {/* Flashbulb Anchors Section */}
+          <div className="rounded-2xl border border-amber-500/30 bg-zinc-900/60 p-5 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-400" />
+                <h2 className="text-base font-bold text-zinc-100">
+                  Flashbulb Memory Anchors (Never Decay)
+                </h2>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">
+                {flashbulbMemories.length} Permanent Milestones
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[360px] overflow-y-auto pr-1">
+              {flashbulbMemories.map((m: any) => (
+                <div
+                  key={m.id}
+                  className="rounded-xl p-3.5 bg-gradient-to-br from-amber-500/10 via-zinc-950 to-zinc-950 border border-amber-500/30 space-y-2"
+                >
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 uppercase font-bold">
+                      Stability: {(m.stability || 120).toFixed(0)}d
+                    </span>
+                    <span className="text-zinc-400">
+                      Vividness: {((m.vividness || 0.95) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-200 font-medium leading-relaxed">
+                    &quot;{m.point}&quot;
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Huginn Thought Raven Trajectories */}
+          <div className="rounded-2xl border border-purple-500/30 bg-zinc-900/60 p-5 space-y-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Compass className="w-5 h-5 text-purple-400" />
+                <h2 className="text-base font-bold text-zinc-100">
+                  Huginn Thought Raven Patterns
+                </h2>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-xs font-mono bg-purple-500/20 text-purple-300 border border-purple-500/40 font-bold">
+                {huginnInsights.length} Emergent Patterns
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {huginnInsights.map((ins: any) => (
+                <div
+                  key={ins.id}
+                  className="rounded-xl p-3.5 bg-zinc-950/80 border border-zinc-800 space-y-1.5"
+                >
+                  <div className="flex items-center justify-between text-[10px] font-mono uppercase font-bold text-purple-400">
+                    <span>{ins.type.replace("_", " ")}</span>
+                    <span className="text-zinc-500">
+                      Conf: {(ins.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    {ins.insight}
                   </p>
                 </div>
               ))}

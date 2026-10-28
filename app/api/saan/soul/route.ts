@@ -28,6 +28,15 @@ import { clusterArcs } from "@/lib/saan/arcs";
 import { buildDeterministicRecap } from "@/lib/saan/recap";
 import { getLatestSelfModel } from "@/lib/saan/self-model";
 import { selectBeat, BEATS } from "@/lib/saan/pacing";
+import {
+  reliveMemory,
+  reframeMemory,
+  cherishMemory,
+  uncherishMemory,
+  driftAnalysis,
+} from "@/lib/saan/mimir-cognitive";
+import { runHuginnScan } from "@/lib/saan/huginn";
+import { getDb } from "@/lib/db/client";
 
 // In-memory persistent caches for live persona & lorebook tuning
 let currentAuthorsNote = { ...DEFAULT_AUTHORS_NOTE };
@@ -102,6 +111,34 @@ export async function GET() {
     const storyRecap = buildDeterministicRecap(recapFacts, openDeeds);
     const selfModel = getLatestSelfModel();
 
+    // Mimir Neuro-Cognitive Extraction & Insights
+    const db = getDb();
+    const flashbulbRows = db.prepare(`
+      SELECT id, point, category, importance, vividness, stability, is_flashbulb, is_cherished, is_reframed, reframe_reason, emotion_pad, created_at
+      FROM saan_memories
+      WHERE is_flashbulb = 1 OR is_cherished = 1 OR importance >= 8
+      ORDER BY created_at DESC
+      LIMIT 12
+    `).all() as any[];
+
+    const flashbulbMemories = flashbulbRows.map((r) => ({
+      id: r.id,
+      point: r.point,
+      category: r.category,
+      importance: r.importance,
+      vividness: r.vividness ?? 0.95,
+      stability: r.stability ?? 120.0,
+      isFlashbulb: Boolean(r.is_flashbulb || r.importance >= 8),
+      isCherished: Boolean(r.is_cherished),
+      isReframed: Boolean(r.is_reframed),
+      reframeReason: r.reframe_reason,
+      emotionPad: r.emotion_pad ? JSON.parse(r.emotion_pad) : [0.5, 0.5, 0.5],
+      createdAt: r.created_at,
+    }));
+
+    const huginnInsights = runHuginnScan();
+    const cognitiveDrift = driftAnalysis();
+
     return NextResponse.json({
       ok: true,
       profile,
@@ -126,6 +163,10 @@ export async function GET() {
       activeArcs,
       storyRecap,
       selfModel: selfModel?.content || null,
+      // Mimir Cognitive Deep Data
+      flashbulbMemories,
+      huginnInsights,
+      cognitiveDrift,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to load soul state" }, { status: 500 });
@@ -157,7 +198,35 @@ export async function POST(req: NextRequest) {
       deedId,
       affects,
       witnesses,
+      newEmotion,
+      reason,
     } = body;
+
+    // Mimir Neuro-Cognitive Actions
+    if (action === "relive_memory" && id) {
+      const result = reliveMemory(Number(id));
+      return NextResponse.json({ ok: result.success, memory: result.memory, blendedMood: result.blendedMood });
+    }
+
+    if (action === "reframe_memory" && id && (newEmotion || mood)) {
+      const success = reframeMemory(Number(id), newEmotion || mood, reason);
+      return NextResponse.json({ ok: success, message: "Memory reframed" });
+    }
+
+    if (action === "cherish_memory" && id) {
+      const success = cherishMemory(Number(id));
+      return NextResponse.json({ ok: success, message: "Memory cherished as anchor" });
+    }
+
+    if (action === "uncherish_memory" && id) {
+      const success = uncherishMemory(Number(id));
+      return NextResponse.json({ ok: success, message: "Anchor removed" });
+    }
+
+    if (action === "run_huginn_scan") {
+      const insights = runHuginnScan();
+      return NextResponse.json({ ok: true, insights });
+    }
 
     // Chronicler Consequence Ledger Actions
     if (action === "add_deed" && text) {

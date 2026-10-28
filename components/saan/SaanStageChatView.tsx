@@ -11,16 +11,25 @@ import {
   RotateCcw,
   Sliders,
   ChevronDown,
+  BookmarkCheck,
+  Film,
+  Zap,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
 import { SaanDialogueBubble, type DialogueBubbleMessage } from "./SaanDialogueBubble";
 import { SaanAffectionBar } from "./SaanAffectionBar";
 import { SaanWorkingMemoryCapsule } from "./SaanWorkingMemoryCapsule";
+import { SaanConsequenceTracker, type DeedItem } from "./SaanConsequenceTracker";
+import { SaanStoryRecapModal } from "./SaanStoryRecapModal";
 
 interface SaanStageChatViewProps {
   profile: any;
   starterChips?: string[];
+  deeds?: DeedItem[];
+  openDeedsCount?: number;
+  activeArcs?: any[];
+  storyRecap?: string;
   onRefreshSoul?: () => void;
   onNavigateTab?: (tab: "stage" | "persona" | "graph" | "soul" | "tools") => void;
 }
@@ -28,12 +37,20 @@ interface SaanStageChatViewProps {
 export function SaanStageChatView({
   profile,
   starterChips = [],
+  deeds = [],
+  openDeedsCount = 0,
+  activeArcs = [],
+  storyRecap,
   onRefreshSoul,
   onNavigateTab,
 }: SaanStageChatViewProps) {
   const [messages, setMessages] = React.useState<DialogueBubbleMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
+
+  // Modals for Chronicler systems
+  const [isLedgerOpen, setIsLedgerOpen] = React.useState(false);
+  const [isRecapOpen, setIsRecapOpen] = React.useState(false);
 
   // Audio & Waveform Visualization
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
@@ -148,11 +165,10 @@ export function SaanStageChatView({
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
 
-      // Clean markdown tags & think tags & narrative asterisks for audio speech
       const clean = text
         .replace(/<think>[\s\S]*?<\/think>/gi, "")
         .replace(/\[\w+\]/g, "")
-        .replace(/\*[^*]+\*/g, "") // Narrative actions are silent gestures
+        .replace(/\*[^*]+\*/g, "")
         .replace(/[*_#`~>]/g, "")
         .trim();
 
@@ -208,7 +224,7 @@ export function SaanStageChatView({
       setTtfaMs(elapsed);
 
       if (data.ok && data.reply) {
-        // Extract avatar emotion token if present
+        // Extract avatar emotion token
         const parsedAvatar = globalAvatarMapper.extract(data.reply);
         if (parsedAvatar.expressions && parsedAvatar.expressions.length > 0) {
           const rawEmo = parsedAvatar.expressions[0].toLowerCase();
@@ -219,7 +235,7 @@ export function SaanStageChatView({
           }
         }
 
-        // Extract reasoning if present
+        // Extract reasoning
         let cleanReply = data.reply;
         let reasoning: string | undefined = undefined;
         const thinkMatch = data.reply.match(/<think>([\s\S]*?)<\/think>/i);
@@ -265,7 +281,7 @@ export function SaanStageChatView({
     }
   };
 
-  // Quick Affection Action Handler (Chai, Headpat, Compliment, Focus)
+  // Quick Affection Action Handler (HerAndHim)
   const handleAffectionAction = (type: "chai" | "headpat" | "compliment" | "focus") => {
     switch (type) {
       case "chai":
@@ -284,6 +300,23 @@ export function SaanStageChatView({
         setAvatarEmotion("thinking");
         handleSend("Chalo Saan, deep work aur architecture focus shuru karte hain. Let's build K7 sovereign OS!");
         break;
+    }
+  };
+
+  // Chronicler Pacing Beat Request (Break Deadlock)
+  const handleTriggerBeat = async () => {
+    try {
+      const res = await fetch("/api/saan/soul", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_pacing_beat" }),
+      });
+      const d = await res.json();
+      if (d.ok && d.beat) {
+        handleSend(`*Nudges Saan gently to change the topic or follow up* (${d.beat.label})`);
+      }
+    } catch (err) {
+      handleSend("Saan, koi nayi interesting baat batao na!");
     }
   };
 
@@ -389,7 +422,7 @@ export function SaanStageChatView({
               onPoke={() => setAvatarEmotion("blush")}
             />
 
-            {/* Quick Interactive Affection Bar (HerAndHim + SillyTavern) */}
+            {/* Quick Interactive Affection Bar (HerAndHim) */}
             <div className="hidden lg:flex flex-col gap-2 pl-4 border-l border-zinc-800/80">
               <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
                 Companion Interaction
@@ -401,10 +434,55 @@ export function SaanStageChatView({
             </div>
           </div>
 
-          {/* Equalizer Waveform & Audio Controls */}
+          {/* Chronicler Tools + Equalizer Waveform & Audio Controls */}
           <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
-            <div className="w-full md:w-64 h-9 rounded-xl bg-zinc-900/90 border border-zinc-800/80 p-1 flex items-center justify-center overflow-hidden shadow-inner">
-              <canvas ref={canvasRef} width={256} height={32} className="w-full h-full" />
+            <div className="flex items-center gap-2">
+              {/* Chronicler: Consequence Ledger Drawer Button */}
+              <button
+                type="button"
+                onClick={() => setIsLedgerOpen(true)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                  openDeedsCount > 0
+                    ? "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 animate-pulse"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                }`}
+                title="View Open Commitments and Consequence Ledger"
+              >
+                <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
+                <span>Promises</span>
+                {openDeedsCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/30 text-amber-200 font-mono font-bold">
+                    {openDeedsCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Chronicler: Previously On... Story Recap Button */}
+              <button
+                type="button"
+                onClick={() => setIsRecapOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition"
+                title="View Story Recap & Active Narrative Arcs"
+              >
+                <Film className="w-3.5 h-3.5 text-purple-400" />
+                <span>Story Recap</span>
+              </button>
+
+              {/* Chronicler: Pacing Director Beat Trigger */}
+              <button
+                type="button"
+                onClick={handleTriggerBeat}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-cyan-300 hover:border-cyan-500/40 transition"
+                title="Inject Dynamic Conversational Beat (Break Deadlock)"
+              >
+                <Zap className="w-3 h-3 text-cyan-400" />
+                <span className="hidden sm:inline">Nudge Beat</span>
+              </button>
+            </div>
+
+            {/* Waveform Canvas */}
+            <div className="w-full md:w-64 h-8 rounded-xl bg-zinc-900/90 border border-zinc-800/80 p-1 flex items-center justify-center overflow-hidden shadow-inner">
+              <canvas ref={canvasRef} width={256} height={28} className="w-full h-full" />
             </div>
 
             <div className="flex items-center gap-2">
@@ -565,6 +643,23 @@ export function SaanStageChatView({
           </button>
         </form>
       </footer>
+
+      {/* Chronicler Interactive Modals */}
+      <SaanConsequenceTracker
+        deeds={deeds}
+        isOpen={isLedgerOpen}
+        onClose={() => setIsLedgerOpen(false)}
+        onRefresh={() => onRefreshSoul?.()}
+      />
+
+      <SaanStoryRecapModal
+        isOpen={isRecapOpen}
+        onClose={() => setIsRecapOpen(false)}
+        storyRecap={storyRecap}
+        activeArcs={activeArcs}
+        openDeedsCount={openDeedsCount}
+        onResumeChat={(text) => handleSend(text)}
+      />
     </div>
   );
 }

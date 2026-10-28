@@ -174,6 +174,10 @@ export function SaanContainer() {
           <SaanStageChatView
             profile={soulData.profile}
             starterChips={soulData.starterChips || []}
+            deeds={soulData.deeds || []}
+            openDeedsCount={soulData.openDeedsCount || 0}
+            activeArcs={soulData.activeArcs || []}
+            storyRecap={soulData.storyRecap}
             onRefreshSoul={refreshSoulData}
             onNavigateTab={(tab) => setActiveTab(tab)}
           />

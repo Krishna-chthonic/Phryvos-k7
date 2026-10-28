@@ -98,9 +98,10 @@ const STARTER_PROMPTS = [
 
 interface SaanChatProps {
   onOpenCockpit?: () => void;
+  onNavigateTab?: (tab: "chat" | "memory" | "soul" | "tools") => void;
 }
 
-export function SaanChat({ onOpenCockpit }: SaanChatProps = {}) {
+export function SaanChat({ onOpenCockpit, onNavigateTab }: SaanChatProps = {}) {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
@@ -613,17 +614,27 @@ export function SaanChat({ onOpenCockpit }: SaanChatProps = {}) {
               <RotateCcw className="h-3.5 w-3.5" />
             </button>
 
-            {/* 50-Repo OS Cockpit Button */}
-            {onOpenCockpit && (
+            {/* Quick Access to Memory Vault */}
+            {onNavigateTab && (
+              <button
+                type="button"
+                onClick={() => onNavigateTab("memory")}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 active:scale-95 transition text-xs font-semibold shadow-xs"
+                title="Open Memory Vault"
+              >
+                <Brain className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Memory Vault</span>
+              </button>
+            )}
+            {onOpenCockpit && !onNavigateTab && (
               <button
                 type="button"
                 onClick={onOpenCockpit}
                 className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 active:scale-95 transition text-xs font-semibold shadow-xs"
-                title="Open 50-Repo Living Companion OS Cockpit"
+                title="Open Cockpit"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">50-Repo Cockpit</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-600 text-white font-mono">50</span>
+                <span className="hidden sm:inline">Cockpit</span>
               </button>
             )}
 

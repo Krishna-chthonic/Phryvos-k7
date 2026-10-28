@@ -36,6 +36,19 @@ export function SaanLivingAvatar({
   const [isBlinking, setIsBlinking] = React.useState(false);
   const [isPoked, setIsPoked] = React.useState(false);
   const [pokeQuote, setPokeQuote] = React.useState<string | null>(null);
+  const [vowelFrame, setVowelFrame] = React.useState<number>(0);
+
+  // Lip-Sync Vowel Driver (AEIOU Viseme cycle when speaking)
+  React.useEffect(() => {
+    if (!isSpeaking) {
+      setVowelFrame(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setVowelFrame((f) => (f + 1) % 4);
+    }, 120);
+    return () => clearInterval(interval);
+  }, [isSpeaking]);
 
   // Normalize emotion
   const cleanEmotion: AvatarEmotion = [
@@ -273,10 +286,21 @@ export function SaanLivingAvatar({
                 </>
               )}
 
-              {/* MOUTH */}
+              {/* MOUTH — Lip-Sync AEIOU Viseme Engine */}
               {isSpeaking ? (
-                // Speaking / Lip-sync Animated Mouth (talking wave)
-                <ellipse cx="50" cy="67" rx="5" ry="4" fill="#f472b6" className="animate-pulse" />
+                vowelFrame === 0 ? (
+                  // Open Vowel 'A'
+                  <ellipse cx="50" cy="67" rx="5.5" ry="4.5" fill="#f472b6" />
+                ) : vowelFrame === 1 ? (
+                  // Half-Open Vowel 'E'
+                  <ellipse cx="50" cy="67" rx="5" ry="3" fill="#f472b6" />
+                ) : vowelFrame === 2 ? (
+                  // Round Vowel 'O'
+                  <ellipse cx="50" cy="67" rx="3.5" ry="4.5" fill="#f472b6" />
+                ) : (
+                  // Wide Vowel 'I'
+                  <ellipse cx="50" cy="67" rx="6" ry="2" fill="#f472b6" />
+                )
               ) : cleanEmotion === "joy" ? (
                 // Open Happy Smile
                 <path

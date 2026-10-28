@@ -16,8 +16,11 @@ import {
   Zap,
   Flame,
   Brain,
+  Timer,
+  Sun,
 } from "lucide-react";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
+import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
 import { SaanDialogueBubble, type DialogueBubbleMessage } from "./SaanDialogueBubble";
 import { SaanAffectionBar } from "./SaanAffectionBar";
@@ -26,6 +29,8 @@ import { SaanConsequenceTracker, type DeedItem } from "./SaanConsequenceTracker"
 import { SaanStoryRecapModal } from "./SaanStoryRecapModal";
 import { SaanFlashbulbVault, type FlashbulbMemory } from "./SaanFlashbulbVault";
 import { SaanHuginnRavenDashboard, type HuginnInsightItem } from "./SaanHuginnRavenDashboard";
+import { SaanHearingStatusCapsule } from "./SaanHearingStatusCapsule";
+import { SaanPomodoroWidget, SaanCircadianSkyWidget } from "./SaanInteractiveWidgets";
 
 interface SaanStageChatViewProps {
   profile: any;
@@ -56,17 +61,21 @@ export function SaanStageChatView({
   const [input, setInput] = React.useState("");
   const [loading, setLoading] = React.useState(false);
 
-  // Modals for Chronicler & Mimir neuro-cognitive systems
+  // Modals for Chronicler & Mimir systems
   const [isLedgerOpen, setIsLedgerOpen] = React.useState(false);
   const [isRecapOpen, setIsRecapOpen] = React.useState(false);
   const [isFlashbulbOpen, setIsFlashbulbOpen] = React.useState(false);
   const [isHuginnOpen, setIsHuginnOpen] = React.useState(false);
+
+  // Airi Component Calling Widget state
+  const [showPomodoro, setShowPomodoro] = React.useState(false);
 
   // Audio & Waveform Visualization
   const [voiceEnabled, setVoiceEnabled] = React.useState(false);
   const [isListening, setIsListening] = React.useState(false);
   const [isSpeaking, setIsSpeaking] = React.useState(false);
   const [avatarEmotion, setAvatarEmotion] = React.useState<AvatarEmotion>("neutral");
+  const [audioLevel, setAudioLevel] = React.useState<number>(0);
   const [ttfaMs, setTtfaMs] = React.useState<number | null>(null);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
@@ -169,39 +178,83 @@ export function SaanStageChatView({
     return () => cancelAnimationFrame(animId);
   }, [isSpeaking, isListening, loading]);
 
-  // TTS with speech pacing
+  // Airi Natural Speech AST Normalizer + Timed <|DELAY n|> Pauses
   const speakText = React.useCallback(
-    (text: string) => {
+    async (rawText: string) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
 
-      const clean = text
+      // 1. Isolate reasoning monologue and asterisk narrative
+      const cleanReasoning = rawText
         .replace(/<think>[\s\S]*?<\/think>/gi, "")
         .replace(/\[\w+\]/g, "")
-        .replace(/\*[^*]+\*/g, "")
-        .replace(/[*_#`~>]/g, "")
+        .replace(/\*[^*]+\*/g, "") // Gestures are silent
         .trim();
 
-      if (!clean) return;
+      // 2. Pre-process through Airi speech transformer (LaTeX math -> spoken words, \ce -> words)
+      const speechTransformed = toNaturalSpeechText(cleanReasoning);
 
-      const utter = new SpeechSynthesisUtterance(clean);
-      utter.rate = 1.05;
-      utter.pitch = 1.02;
-      utter.lang = "hi-IN";
+      // 3. Parse streaming cadence controls: split on <|DELAY n|>
+      // e.g. "Wait a sec <|DELAY 1.5|> now I get it!" -> ["Wait a sec", 1.5, "now I get it!"]
+      const parts = speechTransformed.split(/<\|DELAY\s*([\d.]+)?\|>/g);
 
-      utter.onstart = () => setIsSpeaking(true);
-      utter.onend = () => setIsSpeaking(false);
-      utter.onerror = () => setIsSpeaking(false);
+      setIsSpeaking(true);
 
-      window.speechSynthesis.speak(utter);
+      for (let i = 0; i < parts.length; i++) {
+        const seg = parts[i]?.trim();
+        if (!seg) continue;
+
+        // Check if this segment was a delay seconds number
+        const delaySeconds = parseFloat(seg);
+        if (!isNaN(delaySeconds) && delaySeconds > 0 && delaySeconds <= 10) {
+          // Authentic human conversational silence pause
+          await new Promise((r) => setTimeout(r, delaySeconds * 1000));
+          continue;
+        }
+
+        // Clean out any leftover markdown or raw tags
+        const speakableChunk = seg.replace(/[*_#`~>]/g, "").trim();
+        if (!speakableChunk) continue;
+
+        await new Promise<void>((resolve) => {
+          const utter = new SpeechSynthesisUtterance(speakableChunk);
+          utter.rate = 1.05;
+          utter.pitch = 1.02;
+          utter.lang = "hi-IN";
+
+          utter.onend = () => resolve();
+          utter.onerror = () => resolve();
+
+          window.speechSynthesis.speak(utter);
+        });
+      }
+
+      setIsSpeaking(false);
     },
     []
   );
+
+  // Instant Barge-In: typing or clicking cancels any active speech immediately
+  const handleInputChange = (val: string) => {
+    setInput(val);
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
+    }
+  };
 
   // Send turn
   const handleSend = async (textToSend?: string) => {
     const query = (textToSend || input).trim();
     if (!query || loading) return;
+
+    // Barge-in cancel speech on send
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
 
     const userMsg: DialogueBubbleMessage = {
       id: String(Date.now()),
@@ -308,7 +361,8 @@ export function SaanStageChatView({
         break;
       case "focus":
         setAvatarEmotion("thinking");
-        handleSend("Chalo Saan, deep work aur architecture focus shuru karte hain. Let's build K7 sovereign OS!");
+        setShowPomodoro(true);
+        handleSend("Chalo Saan, deep focus sprint shuru karte hain. Let's build K7 sovereign OS together!");
         break;
     }
   };
@@ -383,7 +437,7 @@ export function SaanStageChatView({
     } catch {}
   };
 
-  // STT Toggle
+  // STT Toggle with Airi Audio Level VU simulation
   const toggleListening = () => {
     if (typeof window === "undefined") return;
     const SpeechRecognition =
@@ -396,6 +450,7 @@ export function SaanStageChatView({
 
     if (isListening) {
       setIsListening(false);
+      setAudioLevel(0);
       return;
     }
 
@@ -405,19 +460,30 @@ export function SaanStageChatView({
       recog.interimResults = false;
       recog.lang = "hi-IN";
 
-      recog.onstart = () => setIsListening(true);
+      recog.onstart = () => {
+        setIsListening(true);
+        setAudioLevel(50);
+      };
       recog.onresult = (e: any) => {
         const transcript = e.results[0][0].transcript;
         setInput(transcript);
         setIsListening(false);
+        setAudioLevel(0);
         handleSend(transcript);
       };
-      recog.onerror = () => setIsListening(false);
-      recog.onend = () => setIsListening(false);
+      recog.onerror = () => {
+        setIsListening(false);
+        setAudioLevel(0);
+      };
+      recog.onend = () => {
+        setIsListening(false);
+        setAudioLevel(0);
+      };
 
       recog.start();
     } catch {
       setIsListening(false);
+      setAudioLevel(0);
     }
   };
 
@@ -428,7 +494,7 @@ export function SaanStageChatView({
       {/* 1. TOP LIVING COMPANION AVATAR STAGE */}
       <section className="relative shrink-0 border-b border-zinc-800/80 bg-zinc-950/90 p-3 sm:p-4 transition-all duration-500">
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Living Avatar with Real Vector Face & Micro-Animations */}
+          {/* Living Avatar with AEIOU Lip-Sync & Micro-Animations */}
           <div className="flex items-center gap-4 w-full md:w-auto">
             <SaanLivingAvatar
               emotion={avatarEmotion}
@@ -452,7 +518,7 @@ export function SaanStageChatView({
             </div>
           </div>
 
-          {/* Chronicler & Mimir Tools + Equalizer Waveform & Audio Controls */}
+          {/* Airi Hearing Capsule + Chronicler & Mimir Tools */}
           <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
             {/* Top Toolbar: Chronicler & Mimir Superchargers */}
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -519,6 +585,21 @@ export function SaanStageChatView({
                 <span>Story Recap</span>
               </button>
 
+              {/* Airi: Toggle Pomodoro Focus Widget */}
+              <button
+                type="button"
+                onClick={() => setShowPomodoro((p) => !p)}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition ${
+                  showPomodoro
+                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
+                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+                }`}
+                title="Toggle Focus Sprint Pomodoro Widget"
+              >
+                <Timer className="w-3 h-3 text-cyan-400" />
+                <span>Sprint</span>
+              </button>
+
               {/* Chronicler: Pacing Director Beat Trigger */}
               <button
                 type="button"
@@ -531,14 +612,17 @@ export function SaanStageChatView({
               </button>
             </div>
 
-            {/* Waveform Canvas */}
-            <div className="w-full md:w-64 h-8 rounded-xl bg-zinc-900/90 border border-zinc-800/80 p-1 flex items-center justify-center overflow-hidden shadow-inner">
-              <canvas ref={canvasRef} width={256} height={28} className="w-full h-full" />
-            </div>
-
+            {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
             <div className="flex items-center gap-2">
+              <SaanHearingStatusCapsule
+                isListening={isListening}
+                isSpeaking={isSpeaking}
+                audioLevel={audioLevel}
+                onToggleMic={toggleListening}
+              />
+
               {ttfaMs && (
-                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800">
+                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-1 rounded-xl border border-zinc-800">
                   TTFA: {ttfaMs}ms
                 </span>
               )}
@@ -547,7 +631,7 @@ export function SaanStageChatView({
               <button
                 type="button"
                 onClick={() => setVoiceEnabled((p) => !p)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-medium border transition ${
                   voiceEnabled
                     ? "bg-purple-600/30 text-purple-300 border-purple-500/50"
                     : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
@@ -558,25 +642,10 @@ export function SaanStageChatView({
                 <span>Auto Voice</span>
               </button>
 
-              {/* Barge-In Push to Talk */}
-              <button
-                type="button"
-                onClick={toggleListening}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
-                  isListening
-                    ? "bg-emerald-600/30 text-emerald-300 border-emerald-500/50 animate-pulse"
-                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                }`}
-                title="Voice Barge-In Push-To-Talk"
-              >
-                {isListening ? <Mic className="h-3 w-3" /> : <MicOff className="h-3 w-3" />}
-                <span>{isListening ? "Listening..." : "Mic"}</span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => onNavigateTab?.("persona")}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition"
                 title="Open Persona & Lorebook Studio"
               >
                 <Sliders className="h-3 w-3 text-purple-400" />
@@ -593,6 +662,19 @@ export function SaanStageChatView({
             bondScore={profile?.bondScore || 65}
           />
         </div>
+
+        {/* Airi Interactive Calling Component: Focus Sprint Pomodoro Widget */}
+        {showPomodoro && (
+          <div className="max-w-4xl mx-auto mt-3 animate-in fade-in duration-300">
+            <SaanPomodoroWidget
+              onSessionComplete={(mins) =>
+                handleSend(
+                  `*Celebrates with Saan* Humne ${mins} minutes ka Deep Focus Sprint successfully complete kar liya!`
+                )
+              }
+            />
+          </div>
+        )}
       </section>
 
       {/* 2. CHAT STREAM AREA */}
@@ -665,7 +747,7 @@ export function SaanStageChatView({
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Type a message or whisper something to Saan..."
             disabled={loading}
             className="flex-1 bg-zinc-900 border border-zinc-800 focus:border-purple-500 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500 transition"

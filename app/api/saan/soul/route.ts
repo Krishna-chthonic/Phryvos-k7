@@ -14,6 +14,44 @@ import { getMoodOrgan } from "@/lib/saan/mood-organ";
 import { getRecentDreamFragments, saveDreamFragment } from "@/lib/saan/dreamer";
 import { getLatestConsolidation, runWeeklyConsolidationPass } from "@/lib/saan/consolidation";
 import { getDynamicStarterChips } from "@/lib/saan/airi-starter-chips";
+import { exportSaanToCardV2 } from "@/lib/saan/character-card";
+import { DEFAULT_AUTHORS_NOTE } from "@/lib/saan/authors-note";
+
+// In-memory persistent caches for live persona & lorebook tuning
+let currentAuthorsNote = { ...DEFAULT_AUTHORS_NOTE };
+let currentCoreMemory = {
+  human: "Name: Krishna\nRole: Sovereign Creator / Engineering Lead\nHabits: Deep architectural thinking, building long-term companion systems, high-standards code craftsman.",
+  persona: "Name: Saan\nRole: Living Companion\nPersona: Warm, witty, deeply loyal, authentic Hinglish banter, grounded emotional presence, highly capable sovereign AI.",
+};
+let currentLorebookEntries = [
+  {
+    id: "lore_1",
+    keys: ["phryvos", "k7", "k9"],
+    secondaryKeys: ["system", "os"],
+    selectiveLogic: "AND_ANY" as const,
+    content: "Phryvos K7 is Krishna's sovereign AI operating system and living companion matrix.",
+    order: 100,
+    constant: true,
+  },
+  {
+    id: "lore_2",
+    keys: ["chai", "tea", "coffee"],
+    secondaryKeys: ["morning", "routine"],
+    selectiveLogic: "AND_ANY" as const,
+    content: "Krishna loves morning chai while planning system architectures and deep thinking.",
+    order: 101,
+    constant: false,
+  },
+  {
+    id: "lore_3",
+    keys: ["jee", "exam", "prep", "study"],
+    secondaryKeys: ["schedule", "focus"],
+    selectiveLogic: "AND_ANY" as const,
+    content: "Krishna is focused on rigorous technical mastery, disciplined study routines, and zero fluff.",
+    order: 102,
+    constant: false,
+  },
+];
 
 export async function GET() {
   try {
@@ -30,6 +68,7 @@ export async function GET() {
     const dreamFragments = getRecentDreamFragments(5);
     const latestConsolidation = getLatestConsolidation("weekly");
     const starterChips = getDynamicStarterChips();
+    const characterCard = exportSaanToCardV2();
 
     return NextResponse.json({
       ok: true,
@@ -43,6 +82,10 @@ export async function GET() {
       dreamFragments,
       latestConsolidation,
       starterChips,
+      characterCard,
+      authorsNote: currentAuthorsNote,
+      coreMemory: currentCoreMemory,
+      lorebookEntries: currentLorebookEntries,
       recentTasks: tasksRes.data || [],
       upcomingEvents: eventsRes.data || [],
     });
@@ -54,7 +97,26 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, point, category, entry, mood, id, date, label, recurring, text, urgency, wishId, fragment, cycleNumber, feltSense } = body;
+    const {
+      action,
+      point,
+      category,
+      entry,
+      mood,
+      id,
+      date,
+      label,
+      recurring,
+      text,
+      urgency,
+      wishId,
+      fragment,
+      cycleNumber,
+      feltSense,
+      authorsNote,
+      coreMemory,
+      loreEntry,
+    } = body;
 
     if (action === "add_memory" && point) {
       saveSaanMemory(point, category || "general", 6);
@@ -99,6 +161,35 @@ export async function POST(req: NextRequest) {
     if (action === "run_consolidation") {
       const rec = runWeeklyConsolidationPass();
       return NextResponse.json({ ok: true, message: "Weekly consolidation completed", rec });
+    }
+
+    if (action === "update_authors_note" && authorsNote) {
+      currentAuthorsNote = { ...currentAuthorsNote, ...authorsNote };
+      return NextResponse.json({ ok: true, message: "Author's Note updated", authorsNote: currentAuthorsNote });
+    }
+
+    if (action === "update_core_memory" && coreMemory) {
+      currentCoreMemory = { ...currentCoreMemory, ...coreMemory };
+      return NextResponse.json({ ok: true, message: "Core Memory updated", coreMemory: currentCoreMemory });
+    }
+
+    if (action === "add_lore_entry" && loreEntry) {
+      const newEntry = {
+        id: `lore_${Date.now()}`,
+        keys: loreEntry.keys || [],
+        secondaryKeys: loreEntry.secondaryKeys || [],
+        selectiveLogic: loreEntry.selectiveLogic || "AND_ANY",
+        content: loreEntry.content || "",
+        order: Number(loreEntry.order || 100),
+        constant: Boolean(loreEntry.constant),
+      };
+      currentLorebookEntries.push(newEntry);
+      return NextResponse.json({ ok: true, message: "Lorebook entry added", entry: newEntry });
+    }
+
+    if (action === "delete_lore_entry" && id) {
+      currentLorebookEntries = currentLorebookEntries.filter((e) => e.id !== String(id));
+      return NextResponse.json({ ok: true, message: "Lorebook entry deleted" });
     }
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });

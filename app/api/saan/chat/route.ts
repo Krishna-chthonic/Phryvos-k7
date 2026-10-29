@@ -64,6 +64,7 @@ import {
   parseTemporalQueryBounds,
   getCausalMemoryRegistry,
 } from "@/lib/saan/temporal-query-engine";
+import { reconstructPointInTimeState } from "@/lib/saan/memory-benchmark-bitemporal";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -221,6 +222,13 @@ export async function POST(req: NextRequest) {
         body.confidence ?? 0.95
       );
       return NextResponse.json({ ok: true, link, causalLinks: getCausalMemoryRegistry().getAllLinks() });
+    }
+
+    // Datapace Point-in-Time State Reconstruction & Epistemic Scrubber
+    if (body.type === "get_time_travel_state") {
+      const asOf = body.asOfTimestamp ? Number(body.asOfTimestamp) : undefined;
+      const state = reconstructPointInTimeState(asOf);
+      return NextResponse.json({ ok: true, state });
     }
 
     const rawUserMessage = body.message;

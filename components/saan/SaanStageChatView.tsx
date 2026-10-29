@@ -33,10 +33,12 @@ import {
   GitBranch,
   Layers,
   Briefcase,
+  Clock,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
 import { SaanHindsightBudgetModal } from "./SaanHindsightBudgetModal";
+import { SaanTimeTravelScrubberModal } from "./SaanTimeTravelScrubberModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -142,6 +144,9 @@ export function SaanStageChatView({
 
   // Hindsight Knapsack Fact Budget State
   const [isHindsightOpen, setIsHindsightOpen] = React.useState(false);
+
+  // Datapace Time-Travel Scrubber State
+  const [isTimeTravelOpen, setIsTimeTravelOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1179,6 +1184,17 @@ export function SaanStageChatView({
                 <Briefcase className="w-3.5 h-3.5 text-amber-400" />
                 <span>Hindsight</span>
               </button>
+
+              {/* Datapace: Bi-Temporal Point-in-Time Scrubber Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsTimeTravelOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-sky-950/40 text-sky-300 border border-zinc-800 hover:border-sky-500/40 transition cursor-pointer"
+                title="Scrub Point-in-Time Knowledge State (Datapace Engine)"
+              >
+                <Clock className="w-3.5 h-3.5 text-sky-400" />
+                <span>Scrubber</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1905,6 +1921,12 @@ export function SaanStageChatView({
       <SaanHindsightBudgetModal
         isOpen={isHindsightOpen}
         onClose={() => setIsHindsightOpen(false)}
+      />
+
+      {/* Datapace Point-in-Time Scrubber Modal */}
+      <SaanTimeTravelScrubberModal
+        isOpen={isTimeTravelOpen}
+        onClose={() => setIsTimeTravelOpen(false)}
       />
     </div>
   );

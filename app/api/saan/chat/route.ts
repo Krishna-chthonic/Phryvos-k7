@@ -66,6 +66,7 @@ import {
 } from "@/lib/saan/temporal-query-engine";
 import { reconstructPointInTimeState } from "@/lib/saan/memory-benchmark-bitemporal";
 import { getGlobalIncrementalSummaryManager } from "@/lib/saan/incremental-summary";
+import { getGlobalMemobaseProfileStore, MemobaseProfileManager } from "@/lib/saan/profile-extractor";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -243,6 +244,26 @@ export async function POST(req: NextRequest) {
       const newIds = body.messageIds || [`msg_${Date.now()}`];
       summaryMgr.updateRunningSummary(body.newText, newIds);
       return NextResponse.json({ ok: true, snapshot: summaryMgr.getSnapshot() });
+    }
+
+    // Memobase User Profile Extraction & 3-State Fact Merger
+    if (body.type === "get_user_profile") {
+      const store = getGlobalMemobaseProfileStore();
+      const attributes = store.getAll();
+      const truncated = MemobaseProfileManager.truncateProfiles(attributes, {
+        preferTopics: ["basic_info", "companion_preferences", "personalization"],
+      });
+      return NextResponse.json({ ok: true, attributes: truncated, allAttributes: attributes });
+    }
+    if (body.type === "update_profile_attribute" && body.attribute) {
+      const store = getGlobalMemobaseProfileStore();
+      const res = store.setAttribute(body.attribute);
+      return NextResponse.json({
+        ok: true,
+        attribute: res.attribute,
+        decision: res.decision,
+        allAttributes: store.getAll(),
+      });
     }
 
     const rawUserMessage = body.message;

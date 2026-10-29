@@ -35,12 +35,14 @@ import {
   Briefcase,
   Clock,
   BookOpen,
+  UserCheck,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
 import { SaanHindsightBudgetModal } from "./SaanHindsightBudgetModal";
 import { SaanTimeTravelScrubberModal } from "./SaanTimeTravelScrubberModal";
 import { SaanIncrementalSummaryModal } from "./SaanIncrementalSummaryModal";
+import { SaanProfileExtractorModal } from "./SaanProfileExtractorModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -152,6 +154,9 @@ export function SaanStageChatView({
 
   // Zep Incremental Summary State
   const [isSummaryOpen, setIsSummaryOpen] = React.useState(false);
+
+  // Memobase User Profile State
+  const [isProfileOpen, setIsProfileOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1211,6 +1216,17 @@ export function SaanStageChatView({
                 <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Summary</span>
               </button>
+
+              {/* Memobase: Categorical User Profile & Fact Merger Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsProfileOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
+                title="Inspect Categorical User Profile & Fact Merger (Memobase Engine)"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-teal-400" />
+                <span>Profile</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1949,6 +1965,12 @@ export function SaanStageChatView({
       <SaanIncrementalSummaryModal
         isOpen={isSummaryOpen}
         onClose={() => setIsSummaryOpen(false)}
+      />
+
+      {/* Memobase Categorical User Profile Modal */}
+      <SaanProfileExtractorModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
       />
     </div>
   );

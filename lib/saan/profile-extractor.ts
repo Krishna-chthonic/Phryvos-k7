@@ -10,9 +10,11 @@
  *    - Token budget floor trimming.
  * 3. 3-State fact merger protocol (APPEND, UPDATE, ABORT) with THOUGHT --- ACTION formatting.
  * 4. Sliding window event recency filtering (timeRangeInDays = 21).
+ * 5. In-memory profile store with seed companion traits.
  */
 
 export interface ProfileAttribute {
+  id?: string;
   topic: string;
   subTopic: string;
   content: string;
@@ -230,4 +232,119 @@ export class MemobaseProfileManager {
 
     return results;
   }
+}
+
+export class MemobaseProfileStore {
+  private attributes = new Map<string, ProfileAttribute>();
+
+  constructor() {
+    this.seedDefaultAttributes();
+  }
+
+  private seedDefaultAttributes(): void {
+    const now = new Date().toISOString();
+    const defaults: ProfileAttribute[] = [
+      {
+        id: "prof_001",
+        topic: "basic_info",
+        subTopic: "name_and_origin",
+        content: "Krishna; origin rooted in India with strong affinity for Jaipur cultural ethos",
+        confidence: 0.98,
+        updatedAt: now,
+      },
+      {
+        id: "prof_002",
+        topic: "basic_info",
+        subTopic: "profession",
+        content: "Software Architect & AI Engineer building Phryvos K7 ecosystem",
+        confidence: 0.96,
+        updatedAt: now,
+      },
+      {
+        id: "prof_003",
+        topic: "companion_preferences",
+        subTopic: "beverage_rituals",
+        content: "Loves strong ginger chai in morning hours; strictly avoids sugary drinks late at night",
+        confidence: 0.95,
+        updatedAt: now,
+      },
+      {
+        id: "prof_004",
+        topic: "companion_preferences",
+        subTopic: "work_cadence",
+        content: "Maintains uninterrupted deep focus blocks during afternoon hours; appreciates calm presence",
+        confidence: 0.94,
+        updatedAt: now,
+      },
+      {
+        id: "prof_005",
+        topic: "personalization",
+        subTopic: "companion_tone",
+        content: "Prefers empathetic, warm Hinglish conversational style with zero corporate AI slop",
+        confidence: 0.97,
+        updatedAt: now,
+      },
+      {
+        id: "prof_006",
+        topic: "interaction_history",
+        subTopic: "milestones",
+        content: "Completed 50-repository sovereign companion upgrade for Saan with 100% test pass rate",
+        confidence: 0.99,
+        updatedAt: now,
+      },
+    ];
+
+    for (const d of defaults) {
+      this.attributes.set(`${d.topic}::${d.subTopic}`, d);
+    }
+  }
+
+  public getAll(): ProfileAttribute[] {
+    return Array.from(this.attributes.values());
+  }
+
+  public setAttribute(attr: Omit<ProfileAttribute, "id" | "updatedAt"> & { id?: string }): {
+    attribute: ProfileAttribute;
+    decision: MergeDecision;
+  } {
+    const key = `${attr.topic.trim()}::${attr.subTopic.trim()}`;
+    const existing = this.attributes.get(key);
+
+    const decision = MemobaseProfileManager.evaluateMergeDecision(
+      existing ? existing.content : null,
+      attr.content
+    );
+
+    const now = new Date().toISOString();
+    const finalContent = decision.updatedContent || attr.content;
+
+    const merged: ProfileAttribute = {
+      id: existing?.id || attr.id || `prof_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      topic: attr.topic.trim(),
+      subTopic: attr.subTopic.trim(),
+      content: finalContent,
+      confidence: Math.max(attr.confidence || 0.9, existing?.confidence || 0),
+      updatedAt: now,
+    };
+
+    if (decision.action !== "ABORT") {
+      this.attributes.set(key, merged);
+    }
+
+    return { attribute: merged, decision };
+  }
+
+  public clear(): void {
+    this.attributes.clear();
+  }
+}
+
+// Global Singleton for Saan
+let globalProfileStoreInstance: MemobaseProfileStore | null = null;
+
+export function getGlobalMemobaseProfileStore(): MemobaseProfileStore {
+  if (!globalProfileStoreInstance) {
+    globalProfileStoreInstance = new MemobaseProfileStore();
+  }
+  return globalProfileStoreInstance;
 }

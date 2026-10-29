@@ -78,6 +78,7 @@ import { SaanAccessibilityTreeModal } from "./SaanAccessibilityTreeModal";
 import { SaanStealthHeadersModal } from "./SaanStealthHeadersModal";
 import { SaanMcpExplorerModal } from "./SaanMcpExplorerModal";
 import { SaanStreamingFrameModal } from "./SaanStreamingFrameModal";
+import { SaanVoiceFsmModal } from "./SaanVoiceFsmModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -258,6 +259,10 @@ export function SaanStageChatView({
   // Pipecat Low-Latency Audio Streaming Pipeline State
   const [isPipecatModalOpen, setIsPipecatModalOpen] = React.useState(false);
   const [pipecatQueueCount, setPipecatQueueCount] = React.useState(2);
+
+  // LiveKit Agents Voice Turn-Taking FSM State
+  const [isVoiceFsmModalOpen, setIsVoiceFsmModalOpen] = React.useState(false);
+  const [voiceFsmState, setVoiceFsmState] = React.useState<string>("IDLE");
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1573,6 +1578,20 @@ export function SaanStageChatView({
                   </span>
                 )}
               </button>
+
+              {/* LiveKit Agents: Voice Turn-Taking FSM Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsVoiceFsmModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Inspect LiveKit Agents Voice Turn-Taking FSM & OVOS Normalizer (Repo #37)"
+              >
+                <Mic className="w-3.5 h-3.5 text-amber-400" />
+                <span>VoiceFSM</span>
+                <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  {voiceFsmState}
+                </span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2467,6 +2486,13 @@ export function SaanStageChatView({
         isOpen={isPipecatModalOpen}
         onClose={() => setIsPipecatModalOpen(false)}
         onQueueSizeChange={(cnt) => setPipecatQueueCount(cnt)}
+      />
+
+      {/* LiveKit Agents Voice Turn-Taking FSM Modal */}
+      <SaanVoiceFsmModal
+        isOpen={isVoiceFsmModalOpen}
+        onClose={() => setIsVoiceFsmModalOpen(false)}
+        onStateChange={(st) => setVoiceFsmState(st)}
       />
     </div>
   );

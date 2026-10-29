@@ -32,6 +32,7 @@ import {
   globalStealthGenerator,
   globalMcpBridge,
   globalAudioPipeline,
+  globalVoiceFSM,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -990,6 +991,32 @@ export async function POST(req: NextRequest) {
     if (body.type === "clear_pipecat_pipeline") {
       globalAudioPipeline.clear();
       return NextResponse.json({ ok: true, queueSize: 0 });
+    }
+
+    // Voice Turn-Taking FSM & Spoken Utterance Normalizer (Repo #37) Endpoints
+    if (body.type === "get_voice_fsm_state") {
+      return NextResponse.json({
+        ok: true,
+        state: globalVoiceFSM.getState(),
+      });
+    }
+
+    if (body.type === "trigger_voice_fsm_event" && body.event) {
+      const result = globalVoiceFSM.handleEvent(body.event);
+      return NextResponse.json({
+        ok: true,
+        result,
+        currentState: globalVoiceFSM.getState(),
+      });
+    }
+
+    if (body.type === "normalize_spoken_utterance" && body.text !== undefined) {
+      const normalized = globalVoiceFSM.normalizeSpokenInput(body.text);
+      return NextResponse.json({
+        ok: true,
+        raw: body.text,
+        normalized,
+      });
     }
 
     const rawUserMessage = body.message;

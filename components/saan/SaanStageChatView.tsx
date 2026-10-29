@@ -91,6 +91,7 @@ import { SaanComposerBusModal } from "./SaanComposerBusModal";
 import { SaanDocumentCollectorModal } from "./SaanDocumentCollectorModal";
 import { SaanMemoryBenchmarkModal } from "./SaanMemoryBenchmarkModal";
 import { SaanContradictionGraphModal } from "./SaanContradictionGraphModal";
+import { SaanMemorySelfEditModal } from "./SaanMemorySelfEditModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -297,6 +298,7 @@ export function SaanStageChatView({
   const [isDocVaultModalOpen, setIsDocVaultModalOpen] = React.useState(false);
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = React.useState(false);
   const [isContradictionModalOpen, setIsContradictionModalOpen] = React.useState(false);
+  const [isSelfEditModalOpen, setIsSelfEditModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1735,6 +1737,17 @@ export function SaanStageChatView({
                 <Zap className="w-3.5 h-3.5 text-amber-400" />
                 <span>Calculus</span>
               </button>
+
+              {/* Letta: Core Memory Blocks & Agentic Self-Editing Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsSelfEditModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-fuchsia-950/40 text-fuchsia-300 border border-zinc-800 hover:border-fuchsia-500/40 transition cursor-pointer"
+                title="Inspect Letta Core Memory Blocks & Agentic Self-Editing (Repo #49)"
+              >
+                <Brain className="w-3.5 h-3.5 text-fuchsia-400" />
+                <span>SelfEdit</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2712,6 +2725,12 @@ export function SaanStageChatView({
       <SaanContradictionGraphModal
         isOpen={isContradictionModalOpen}
         onClose={() => setIsContradictionModalOpen(false)}
+      />
+
+      {/* Letta Core Memory Self-Edit Modal */}
+      <SaanMemorySelfEditModal
+        isOpen={isSelfEditModalOpen}
+        onClose={() => setIsSelfEditModalOpen(false)}
       />
     </div>
   );

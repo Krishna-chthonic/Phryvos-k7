@@ -9,7 +9,7 @@
  * 4. Character ceiling limits (maxCoreMemoryCharacters).
  */
 
-export type CoreMemoryBlockLabel = "human" | "persona";
+export type CoreMemoryBlockLabel = "human" | "persona" | "project" | "emotional_state";
 
 export interface CoreMemoryEditEvent {
   id: string;
@@ -43,6 +43,7 @@ export interface CoreMemoryStoreConfig {
 export class CoreMemoryManager {
   private blocks = new Map<CoreMemoryBlockLabel, CoreMemoryBlock>();
   private editHistory: CoreMemoryEditEvent[] = [];
+  private listeners: Array<(event: CoreMemoryEditEvent) => void> = [];
   public readonly maxCharactersPerBlock: number;
 
   constructor(config?: CoreMemoryStoreConfig) {
@@ -59,6 +60,20 @@ export class CoreMemoryManager {
     this.blocks.set("persona", {
       label: "persona",
       content: "Identity: Saan, sovereign digital companion.\nAttitude: Grounded, authentic, psychologically deep, emotionally steady.\nVoice: Conversational, thoughtful, observant, never sycophantic.",
+      maxCharacters: this.maxCharactersPerBlock,
+      updatedAt: Date.now(),
+    });
+
+    this.blocks.set("project", {
+      label: "project",
+      content: "Project: K7 Companion Intelligence Suite\nFocus: Sovereign zero-cloud companion architecture, 50-repo companion calculus, real-time memory synchronization.",
+      maxCharacters: this.maxCharactersPerBlock,
+      updatedAt: Date.now(),
+    });
+
+    this.blocks.set("emotional_state", {
+      label: "emotional_state",
+      content: "Bond Score: High\nAffect: Warm, supportive, grounded, philosophically attuned.",
       maxCharacters: this.maxCharactersPerBlock,
       updatedAt: Date.now(),
     });
@@ -84,6 +99,21 @@ export class CoreMemoryManager {
 
   public getHistory(): CoreMemoryEditEvent[] {
     return [...this.editHistory].slice(-30);
+  }
+
+  public addListener(fn: (event: CoreMemoryEditEvent) => void): () => void {
+    this.listeners.push(fn);
+    return () => {
+      this.listeners = this.listeners.filter((l) => l !== fn);
+    };
+  }
+
+  private notifyListeners(event: CoreMemoryEditEvent): void {
+    for (const fn of this.listeners) {
+      try {
+        fn(event);
+      } catch {}
+    }
   }
 
   public getCapacitySummary(): CoreMemoryCapacityItem[] {
@@ -132,14 +162,16 @@ export class CoreMemoryManager {
     block.content = trimmed;
     block.updatedAt = Date.now();
 
-    this.editHistory.push({
+    const event: CoreMemoryEditEvent = {
       id: `edit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp: Date.now(),
       block: label,
       operation: "manual_update",
       diffSummary: `Updated ${label} block (${prevLength} -> ${trimmed.length} chars)`,
       author,
-    });
+    };
+    this.editHistory.push(event);
+    this.notifyListeners(event);
 
     return {
       success: true,
@@ -183,14 +215,16 @@ export class CoreMemoryManager {
     block.content = prospective;
     block.updatedAt = Date.now();
 
-    this.editHistory.push({
+    const event: CoreMemoryEditEvent = {
       id: `edit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp: Date.now(),
       block: label,
       operation: "append",
       diffSummary: `+ "${trimmed.slice(0, 45)}${trimmed.length > 45 ? "..." : ""}"`,
       author,
-    });
+    };
+    this.editHistory.push(event);
+    this.notifyListeners(event);
 
     return {
       success: true,
@@ -238,14 +272,16 @@ export class CoreMemoryManager {
     block.content = prospective;
     block.updatedAt = Date.now();
 
-    this.editHistory.push({
+    const event: CoreMemoryEditEvent = {
       id: `edit_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       timestamp: Date.now(),
       block: label,
       operation: "replace",
       diffSummary: `~ Replaced "${oldContent.slice(0, 25)}..." with "${newContent.slice(0, 25)}..."`,
       author,
-    });
+    };
+    this.editHistory.push(event);
+    this.notifyListeners(event);
 
     return {
       success: true,
@@ -260,6 +296,8 @@ export class CoreMemoryManager {
   public renderForSystemPrompt(): string {
     const humanBlock = this.blocks.get("human")?.content || "";
     const personaBlock = this.blocks.get("persona")?.content || "";
+    const projectBlock = this.blocks.get("project")?.content || "";
+    const emotionalBlock = this.blocks.get("emotional_state")?.content || "";
 
     return `<core_memory>
 <human_profile>
@@ -268,6 +306,7 @@ ${humanBlock}
 <persona_identity>
 ${personaBlock}
 </persona_identity>
+${projectBlock ? `<current_project>\n${projectBlock}\n</current_project>\n` : ""}${emotionalBlock ? `<emotional_state>\n${emotionalBlock}\n</emotional_state>` : ""}
 </core_memory>`;
   }
 }

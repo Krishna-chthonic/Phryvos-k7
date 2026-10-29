@@ -1301,6 +1301,39 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Letta Core Memory Blocks & Agentic Self-Editing (Repo #49) Endpoints
+    if (body.type === "get_core_memory_blocks") {
+      const memManager = getCoreMemoryManager();
+      return NextResponse.json({
+        ok: true,
+        blocks: memManager.getAllBlocks(),
+        capacity: memManager.getCapacitySummary(),
+        history: memManager.getHistory(),
+      });
+    }
+
+    if (body.type === "edit_core_memory_block" && body.block) {
+      const memManager = getCoreMemoryManager();
+      let result;
+      if (body.operation === "append" && body.text) {
+        result = memManager.append(body.block, body.text, body.author || "user");
+      } else if (body.operation === "replace" && body.oldContent && body.newContent) {
+        result = memManager.replace(body.block, body.oldContent, body.newContent, body.author || "user");
+      } else if (body.newContent !== undefined) {
+        result = memManager.updateBlock(body.block, body.newContent, body.author || "user");
+      } else {
+        return NextResponse.json({ error: "Invalid edit operation parameters" }, { status: 400 });
+      }
+
+      return NextResponse.json({
+        ok: true,
+        result,
+        blocks: memManager.getAllBlocks(),
+        capacity: memManager.getCapacitySummary(),
+        history: memManager.getHistory(),
+      });
+    }
+
     const rawUserMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 

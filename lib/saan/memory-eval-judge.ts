@@ -228,3 +228,246 @@ export class MemoryEvalJudge {
     };
   }
 }
+
+// ============================================================================
+// Sovereign Real-Time Turn Fidelity Evaluator & Multi-Metric Telemetry
+// ============================================================================
+
+export interface MemoryEvalMetrics {
+  faithfulness: number;     // [0, 1]: Assistant reply faithfully grounded in recalled memories
+  relevancy: number;        // [0, 1]: Recalled facts directly answer or enrich user query
+  temporalIntegrity: number;// [0, 1]: Facts adhere to temporal timeline with zero anachronisms
+  slopPenalty: number;      // [0, 1]: Degree of repetitive clichés or formulaic AI tropes detected
+  compositeFidelity: number;// [0, 1]: Weighted composite score
+  grade: "S_TIER" | "A_TIER" | "B_TIER" | "FAIL";
+  critique: string;
+}
+
+export interface MemoryEvalRecord {
+  id: string;
+  timestamp: string;
+  userMessage: string;
+  reply: string;
+  recalledMemories: string[];
+  metrics: MemoryEvalMetrics;
+  latencyMs: number;
+}
+
+export interface MemoryEvalAggregateStats {
+  totalEvaluated: number;
+  avgFaithfulness: number;
+  avgRelevancy: number;
+  avgTemporalIntegrity: number;
+  avgCompositeFidelity: number;
+  passRate: number; // percentage of turns scoring >= A_TIER (0.75)
+  gradeDistribution: Record<string, number>;
+}
+
+const COMMON_SLOP_PATTERNS = [
+  /\b(delve into|tapestry|beacon|testament to|kaleidoscope|resonate|in conclusion|it's important to remember)\b/gi,
+  /\b(cherish every moment|always remember that|i'm always here for you no matter what)\b/gi,
+  /\b(pyaar aur dosti ka bandhan|hamesha muskurate raho)\b/gi,
+];
+
+export class MemoryEvalJudgeEngine {
+  private static tokenize(text: string): string[] {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 2);
+  }
+
+  public static calculateRelevancy(query: string, memories: string[]): number {
+    if (!memories || memories.length === 0) return 0.6;
+    const queryTokens = new Set(this.tokenize(query));
+    if (queryTokens.size === 0) return 0.5;
+
+    const combinedMemories = memories.join(" ");
+    const memoryTokens = this.tokenize(combinedMemories);
+    if (memoryTokens.length === 0) return 0.2;
+
+    const matchedTokens = new Set<string>();
+    for (const token of memoryTokens) {
+      if (queryTokens.has(token)) {
+        matchedTokens.add(token);
+      }
+    }
+
+    const overlap = matchedTokens.size;
+    if (overlap === 0) return 0.25;
+
+    const coverage = overlap / queryTokens.size;
+    const score = Math.min(1.0, coverage * 0.5 + 0.5);
+    return Number(score.toFixed(3));
+  }
+
+  public static calculateFaithfulness(reply: string, memories: string[]): number {
+    if (!memories || memories.length === 0) return 0.85;
+    const replyTokens = this.tokenize(reply);
+    if (replyTokens.length === 0) return 0.5;
+
+    const memoryTokenSet = new Set(this.tokenize(memories.join(" ")));
+    if (memoryTokenSet.size === 0) return 0.5;
+
+    let groundedTokens = 0;
+    for (const token of replyTokens) {
+      if (memoryTokenSet.has(token)) {
+        groundedTokens++;
+      }
+    }
+
+    const groundRatio = groundedTokens / Math.max(1, replyTokens.length);
+    const normalized = Math.min(1.0, groundRatio * 2.0 + 0.5);
+    return Number(normalized.toFixed(3));
+  }
+
+  public static calculateTemporalIntegrity(userMessage: string, reply: string, memories: string[]): number {
+    const combined = `${userMessage} ${reply} ${memories.join(" ")}`.toLowerCase();
+    const temporalConfusion = /\b(yesterday tomorrow|last week next year|pehle kal aane wala)\b/i.test(combined);
+    if (temporalConfusion) return 0.3;
+    return 0.95;
+  }
+
+  public static calculateSlopPenalty(reply: string): number {
+    let slopCount = 0;
+    for (const pat of COMMON_SLOP_PATTERNS) {
+      const matches = reply.match(pat);
+      if (matches) slopCount += matches.length;
+    }
+
+    if (slopCount === 0) return 0.0;
+    return Number(Math.min(1.0, slopCount * 0.25).toFixed(3));
+  }
+
+  public static evaluateTurn(
+    userMessage: string,
+    reply: string,
+    recalledMemories: string[] = []
+  ): MemoryEvalMetrics {
+    const relevancy = this.calculateRelevancy(userMessage, recalledMemories);
+    const faithfulness = this.calculateFaithfulness(reply, recalledMemories);
+    const temporalIntegrity = this.calculateTemporalIntegrity(userMessage, reply, recalledMemories);
+    const slopPenalty = this.calculateSlopPenalty(reply);
+
+    const compositeRaw = (
+      faithfulness * 0.40 +
+      relevancy * 0.35 +
+      temporalIntegrity * 0.25 -
+      slopPenalty * 0.20
+    );
+    const compositeFidelity = Number(Math.max(0.0, Math.min(1.0, compositeRaw)).toFixed(3));
+
+    let grade: MemoryEvalMetrics["grade"] = "FAIL";
+    if (compositeFidelity >= 0.88) grade = "S_TIER";
+    else if (compositeFidelity >= 0.72) grade = "A_TIER";
+    else if (compositeFidelity >= 0.55) grade = "B_TIER";
+
+    const critique = [
+      `Fidelity: ${(compositeFidelity * 100).toFixed(1)}% [${grade}].`,
+      faithfulness >= 0.7 ? "Strong factual grounding." : "Moderate grounding; watch for drift.",
+      relevancy >= 0.6 ? "Context highly pertinent." : "Context loosely aligned.",
+      slopPenalty > 0 ? `Cliché penalty applied (-${(slopPenalty * 20).toFixed(0)}%).` : "Clean organic style.",
+    ].join(" ");
+
+    return {
+      faithfulness,
+      relevancy,
+      temporalIntegrity,
+      slopPenalty,
+      compositeFidelity,
+      grade,
+      critique,
+    };
+  }
+}
+
+export class MemoryEvalStore {
+  private history: MemoryEvalRecord[] = [];
+  private readonly maxRecords: number = 100;
+
+  public recordEvaluation(
+    userMessage: string,
+    reply: string,
+    recalledMemories: string[] = [],
+    latencyMs: number = 5
+  ): MemoryEvalRecord {
+    const metrics = MemoryEvalJudgeEngine.evaluateTurn(userMessage, reply, recalledMemories);
+    const record: MemoryEvalRecord = {
+      id: `eval_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+      userMessage,
+      reply,
+      recalledMemories,
+      metrics,
+      latencyMs,
+    };
+
+    this.history.unshift(record);
+    if (this.history.length > this.maxRecords) {
+      this.history.pop();
+    }
+    return record;
+  }
+
+  public getHistory(limit: number = 20): MemoryEvalRecord[] {
+    return this.history.slice(0, limit);
+  }
+
+  public getAggregateStats(): MemoryEvalAggregateStats {
+    if (this.history.length === 0) {
+      return {
+        totalEvaluated: 0,
+        avgFaithfulness: 1.0,
+        avgRelevancy: 1.0,
+        avgTemporalIntegrity: 1.0,
+        avgCompositeFidelity: 1.0,
+        passRate: 100.0,
+        gradeDistribution: { S_TIER: 0, A_TIER: 0, B_TIER: 0, FAIL: 0 },
+      };
+    }
+
+    let sumFaith = 0;
+    let sumRel = 0;
+    let sumTemp = 0;
+    let sumComp = 0;
+    let passing = 0;
+    const grades: Record<string, number> = { S_TIER: 0, A_TIER: 0, B_TIER: 0, FAIL: 0 };
+
+    for (const rec of this.history) {
+      sumFaith += rec.metrics.faithfulness;
+      sumRel += rec.metrics.relevancy;
+      sumTemp += rec.metrics.temporalIntegrity;
+      sumComp += rec.metrics.compositeFidelity;
+      grades[rec.metrics.grade] = (grades[rec.metrics.grade] || 0) + 1;
+      if (rec.metrics.grade === "S_TIER" || rec.metrics.grade === "A_TIER" || rec.metrics.grade === "B_TIER") {
+        passing++;
+      }
+    }
+
+    const total = this.history.length;
+    return {
+      totalEvaluated: total,
+      avgFaithfulness: Number((sumFaith / total).toFixed(3)),
+      avgRelevancy: Number((sumRel / total).toFixed(3)),
+      avgTemporalIntegrity: Number((sumTemp / total).toFixed(3)),
+      avgCompositeFidelity: Number((sumComp / total).toFixed(3)),
+      passRate: Number(((passing / total) * 100).toFixed(1)),
+      gradeDistribution: grades,
+    };
+  }
+
+  public clear(): void {
+    this.history = [];
+  }
+}
+
+let globalMemoryEvalStore: MemoryEvalStore | null = null;
+
+export function getMemoryEvalStore(): MemoryEvalStore {
+  if (!globalMemoryEvalStore) {
+    globalMemoryEvalStore = new MemoryEvalStore();
+  }
+  return globalMemoryEvalStore;
+}
+

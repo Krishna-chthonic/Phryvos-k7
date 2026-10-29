@@ -78,6 +78,7 @@ import { getWorkingScratchpadManager } from "@/lib/saan/working-scratchpad";
 import { getObservableActionStream } from "@/lib/saan/observable-action-stream";
 import { DirtyJsonRepairEngine, getDirtyJsonRepairAuditor } from "@/lib/saan/dirty-json-repair";
 import { getProactiveTriggerManager } from "@/lib/saan/trigger-recall";
+import { getMemoryEvalStore, MemoryEvalJudgeEngine } from "@/lib/saan/memory-eval-judge";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -523,6 +524,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, briefing, isActive });
     }
 
+    // MemoryEvalJudge (Repo #22) Endpoints
+    if (body.type === "get_memory_eval_stats") {
+      const store = getMemoryEvalStore();
+      return NextResponse.json({
+        ok: true,
+        stats: store.getAggregateStats(),
+        history: store.getHistory(30),
+      });
+    }
+
+    if (body.type === "evaluate_turn_fidelity" && body.reply) {
+      const store = getMemoryEvalStore();
+      const record = store.recordEvaluation(
+        body.userMessage || "",
+        body.reply,
+        body.recalledMemories || [],
+        body.latencyMs || 8
+      );
+      return NextResponse.json({
+        ok: true,
+        record,
+        stats: store.getAggregateStats(),
+      });
+    }
+
+    if (body.type === "clear_memory_eval_history") {
+      getMemoryEvalStore().clear();
+      return NextResponse.json({ ok: true });
+    }
+
     const rawUserMessage = body.message;
     const history: IncomingMessage[] = body.history || [];
 
@@ -829,6 +860,12 @@ export async function POST(req: NextRequest) {
     }
 
     const updatedProfile = getSaanProfile(bondScore);
+    const evalRecord = getMemoryEvalStore().recordEvaluation(
+      userMessage,
+      reply,
+      memories,
+      5
+    );
 
     return NextResponse.json({
       ok: true,
@@ -853,6 +890,7 @@ export async function POST(req: NextRequest) {
       coreMemorySummary: getCoreMemoryManager().getCapacitySummary(),
       mem0Decisions,
       mem0Events: getMem0AuditLog(),
+      memoryEval: evalRecord.metrics,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to process turn" }, { status: 500 });

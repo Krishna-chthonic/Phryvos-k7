@@ -41,6 +41,7 @@ import {
   BrainCircuit,
   Activity,
   Wrench,
+  Scale,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -54,6 +55,7 @@ import { SaanWorkingScratchpadModal } from "./SaanWorkingScratchpadModal";
 import { SaanActionTimelineModal } from "./SaanActionTimelineModal";
 import { SaanDirtyJsonDebugModal } from "./SaanDirtyJsonDebugModal";
 import { SaanProactiveTriggerModal } from "./SaanProactiveTriggerModal";
+import { SaanMemoryEvalJudgeModal } from "./SaanMemoryEvalJudgeModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -187,6 +189,9 @@ export function SaanStageChatView({
 
   // TriggerRecall Proactive Engine State
   const [isProactiveTriggerOpen, setIsProactiveTriggerOpen] = React.useState(false);
+
+  // MemoryEvalJudge Ground Truth Memory Evaluator State
+  const [isMemoryEvalJudgeOpen, setIsMemoryEvalJudgeOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1323,6 +1328,17 @@ export function SaanStageChatView({
                 <Sun className="w-3.5 h-3.5 text-amber-400" />
                 <span>Proactive</span>
               </button>
+
+              {/* MemoryEvalJudge: Ground-Truth Memory Fidelity Judge & Telemetry Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsMemoryEvalJudgeOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Inspect Ground-Truth Memory Fidelity Judge & Multi-Metric Telemetry (MemoryEvalJudge Engine)"
+              >
+                <Scale className="w-3.5 h-3.5 text-cyan-400" />
+                <span>EvalJudge</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2128,6 +2144,12 @@ export function SaanStageChatView({
       <SaanProactiveTriggerModal
         isOpen={isProactiveTriggerOpen}
         onClose={() => setIsProactiveTriggerOpen(false)}
+      />
+
+      {/* MemoryEvalJudge Ground Truth Memory Evaluator Modal */}
+      <SaanMemoryEvalJudgeModal
+        isOpen={isMemoryEvalJudgeOpen}
+        onClose={() => setIsMemoryEvalJudgeOpen(false)}
       />
     </div>
   );

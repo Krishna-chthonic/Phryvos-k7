@@ -35,6 +35,7 @@ import {
   globalVoiceFSM,
   globalWhisperNormalizer,
   globalCadenceEngine,
+  globalPreflightPipeline,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1081,6 +1082,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         result: pacingResult,
+      });
+    }
+
+    // Open-WebUI Preflight Security Filter Valves & Generation Settings (Repo #41) Endpoints
+    if (body.type === "get_preflight_config") {
+      const config = globalPreflightPipeline.getConfig();
+      return NextResponse.json({
+        ok: true,
+        config,
+      });
+    }
+
+    if (body.type === "update_preflight_config" && body.config) {
+      const updated = globalPreflightPipeline.updateConfig(body.config);
+      return NextResponse.json({
+        ok: true,
+        config: updated,
+      });
+    }
+
+    if (body.type === "test_preflight_pipeline" && body.prompt !== undefined) {
+      const result = globalPreflightPipeline.applyPreflightPipeline(body.prompt, body.customConfig);
+      return NextResponse.json({
+        ok: true,
+        result,
       });
     }
 

@@ -14,7 +14,75 @@ export interface RedactionResult {
   detectedTypes: string[];
 }
 
+export interface ModelGenerationConfig {
+  temperature: number;
+  topP: number;
+  maxTokens: number;
+  systemPromptOverride?: string;
+  enableCredentialScrubber: boolean;
+  enablePiiScrubber: boolean;
+  enableCodeSanitizer: boolean;
+}
+
 export class PreflightFilterPipeline {
+  private config: ModelGenerationConfig = {
+    temperature: 0.7,
+    topP: 0.95,
+    maxTokens: 4096,
+    systemPromptOverride: '',
+    enableCredentialScrubber: true,
+    enablePiiScrubber: true,
+    enableCodeSanitizer: true,
+  };
+
+  public getConfig(): ModelGenerationConfig {
+    return { ...this.config };
+  }
+
+  public updateConfig(patch: Partial<ModelGenerationConfig>): ModelGenerationConfig {
+    this.config = { ...this.config, ...patch };
+    return { ...this.config };
+  }
+
+  /**
+   * Scrubs personally identifiable information (PII) such as email addresses and phone numbers.
+   */
+  public scrubPii(text: string): RedactionResult {
+    if (!text || typeof text !== 'string') {
+      return { cleanedText: '', redactedCount: 0, detectedTypes: [] };
+    }
+
+    let cleaned = text;
+    let count = 0;
+    const types: Set<string> = new Set();
+
+    // Email regex
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+    if (emailRegex.test(cleaned)) {
+      cleaned = cleaned.replace(emailRegex, () => {
+        count++;
+        types.add('email');
+        return '[REDACTED_EMAIL]';
+      });
+    }
+
+    // Phone regex (e.g. +1-555-123-4567, (555) 123-4567, 555-123-4567)
+    const phoneRegex = /\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+    if (phoneRegex.test(cleaned)) {
+      cleaned = cleaned.replace(phoneRegex, () => {
+        count++;
+        types.add('phone_number');
+        return '[REDACTED_PHONE]';
+      });
+    }
+
+    return {
+      cleanedText: cleaned,
+      redactedCount: count,
+      detectedTypes: Array.from(types),
+    };
+  }
+
   /**
    * Scrubs sensitive secrets, API keys, JWTs, and private keys from prompts
    * before sending to external model APIs.
@@ -69,7 +137,7 @@ export class PreflightFilterPipeline {
     }
 
     // 5. JWT tokens (Header.Payload.Signature)
-    const jwtRegex = /\b(ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/g;
+    const jwtRegex = /\b(ey[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,})\b/g;
     if (jwtRegex.test(cleaned)) {
       cleaned = cleaned.replace(jwtRegex, () => {
         count++;
@@ -82,6 +150,40 @@ export class PreflightFilterPipeline {
       cleanedText: cleaned,
       redactedCount: count,
       detectedTypes: Array.from(types),
+    };
+  }
+
+  /**
+   * Applies the configured preflight pipeline valves to an incoming prompt.
+   */
+  public applyPreflightPipeline(promptText: string, customConfig?: Partial<ModelGenerationConfig>): {
+    processedPrompt: string;
+    totalRedactions: number;
+    detectedTypes: string[];
+  } {
+    const activeCfg = { ...this.config, ...customConfig };
+    let current = promptText;
+    let totalRedactions = 0;
+    const detected: Set<string> = new Set();
+
+    if (activeCfg.enableCredentialScrubber) {
+      const res = this.scrubCredentials(current);
+      current = res.cleanedText;
+      totalRedactions += res.redactedCount;
+      res.detectedTypes.forEach((t) => detected.add(t));
+    }
+
+    if (activeCfg.enablePiiScrubber) {
+      const res = this.scrubPii(current);
+      current = res.cleanedText;
+      totalRedactions += res.redactedCount;
+      res.detectedTypes.forEach((t) => detected.add(t));
+    }
+
+    return {
+      processedPrompt: current,
+      totalRedactions,
+      detectedTypes: Array.from(detected),
     };
   }
 
@@ -103,3 +205,6 @@ export class PreflightFilterPipeline {
     return code.trim();
   }
 }
+
+export const globalPreflightPipeline = new PreflightFilterPipeline();
+

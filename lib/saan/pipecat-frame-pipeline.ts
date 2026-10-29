@@ -82,8 +82,27 @@ export class StartInterruptionFrame extends Frame {
   }
 }
 
+export interface ProcessedFrameAudit {
+  id: number;
+  name: string;
+  type: string;
+  pts: string;
+  interruptible: boolean;
+  timestamp: number;
+  status: 'enqueued' | 'popped' | 'interrupted_drained';
+}
+
 export class PipecatFramePipeline {
   private queue: Frame[] = [];
+  private auditLog: ProcessedFrameAudit[] = [];
+
+  constructor() {
+    // Seed initial welcome audio and text frame
+    const welcomeText = new TextFrame("Namaste! Main Saan hoon, aapka sovereign AI companion.", true, { origin: "system" });
+    const welcomeAudio = new AudioRawFrame(new Uint8Array(640), 16000, 1, true, { durationMs: 20 });
+    this.push(welcomeText);
+    this.push(welcomeAudio);
+  }
 
   /**
    * Pushes a frame into the streaming pipeline.
@@ -92,10 +111,32 @@ export class PipecatFramePipeline {
    */
   public push(frame: Frame): void {
     if (frame instanceof CancelFrame || frame instanceof StartInterruptionFrame) {
-      this.drainInterruptibles();
+      const dropped = this.drainInterruptibles();
+      this.auditLog.unshift({
+        id: frame.id,
+        name: frame.name,
+        type: frame.constructor.name,
+        pts: frame.pts.toString(),
+        interruptible: frame.interruptible,
+        timestamp: Date.now(),
+        status: 'enqueued',
+      });
       this.queue.push(frame);
     } else {
+      this.auditLog.unshift({
+        id: frame.id,
+        name: frame.name,
+        type: frame.constructor.name,
+        pts: frame.pts.toString(),
+        interruptible: frame.interruptible,
+        timestamp: Date.now(),
+        status: 'enqueued',
+      });
       this.queue.push(frame);
+    }
+
+    if (this.auditLog.length > 50) {
+      this.auditLog.pop();
     }
   }
 
@@ -103,7 +144,12 @@ export class PipecatFramePipeline {
    * Dequeues the next frame in FIFO sequence.
    */
   public pop(): Frame | null {
-    return this.queue.shift() || null;
+    const frame = this.queue.shift() || null;
+    if (frame) {
+      const record = this.auditLog.find(r => r.id === frame.id);
+      if (record) record.status = 'popped';
+    }
+    return frame;
   }
 
   /**
@@ -112,6 +158,12 @@ export class PipecatFramePipeline {
    */
   public drainInterruptibles(): number {
     const originalCount = this.queue.length;
+    for (const f of this.queue) {
+      if (f.interruptible) {
+        const record = this.auditLog.find(r => r.id === f.id);
+        if (record) record.status = 'interrupted_drained';
+      }
+    }
     this.queue = this.queue.filter(f => !f.interruptible);
     return originalCount - this.queue.length;
   }
@@ -128,5 +180,20 @@ export class PipecatFramePipeline {
    */
   public getQueuedFrames(): Frame[] {
     return [...this.queue];
+  }
+
+  /**
+   * Returns recent frame audit history.
+   */
+  public getAuditLog(): ProcessedFrameAudit[] {
+    return this.auditLog;
+  }
+
+  /**
+   * Clears the queue and audit log.
+   */
+  public clear(): void {
+    this.queue = [];
+    this.auditLog = [];
   }
 }

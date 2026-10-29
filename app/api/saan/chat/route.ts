@@ -31,8 +31,14 @@ import {
   globalAccessibilityParser,
   globalStealthGenerator,
   globalMcpBridge,
+  globalAudioPipeline,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
+import {
+  AudioRawFrame,
+  TextFrame,
+  CancelFrame,
+} from "@/lib/saan/pipecat-frame-pipeline";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
 import { pickReaction, splitBurst, calculateReplyDelay } from "@/lib/saan/humanize";
@@ -920,6 +926,70 @@ export async function POST(req: NextRequest) {
         request: body.request,
         response,
       });
+    }
+
+    // Pipecat Real-Time Streaming Frame Pipeline (Repo #36) Endpoints
+    if (body.type === "get_pipecat_pipeline_state") {
+      return NextResponse.json({
+        ok: true,
+        queueSize: globalAudioPipeline.size(),
+        queuedFrames: globalAudioPipeline.getQueuedFrames().map((f) => ({
+          id: f.id,
+          name: f.name,
+          type: f.constructor.name,
+          pts: f.pts.toString(),
+          interruptible: f.interruptible,
+          metadata: f.metadata,
+        })),
+        auditLog: globalAudioPipeline.getAuditLog(),
+      });
+    }
+
+    if (body.type === "push_pipecat_frame") {
+      const frameType = body.frameType || "text";
+      let frame;
+      if (frameType === "audio") {
+        const bytes = body.bytes ? Buffer.from(body.bytes, "base64") : new Uint8Array(640);
+        frame = new AudioRawFrame(bytes, body.sampleRate || 16000, body.channels || 1, body.interruptible ?? true, {
+          origin: body.origin || "simulator",
+        });
+      } else {
+        frame = new TextFrame(body.text || "Streaming text chunk", body.interruptible ?? true, {
+          origin: body.origin || "simulator",
+        });
+      }
+
+      globalAudioPipeline.push(frame);
+
+      return NextResponse.json({
+        ok: true,
+        enqueuedFrame: {
+          id: frame.id,
+          name: frame.name,
+          type: frame.constructor.name,
+          pts: frame.pts.toString(),
+          interruptible: frame.interruptible,
+        },
+        queueSize: globalAudioPipeline.size(),
+        auditLog: globalAudioPipeline.getAuditLog(),
+      });
+    }
+
+    if (body.type === "trigger_pipecat_barge_in") {
+      const cancelFrame = new CancelFrame(body.reason || "user_barge_in");
+      globalAudioPipeline.push(cancelFrame);
+
+      return NextResponse.json({
+        ok: true,
+        bargeInTriggered: true,
+        queueSize: globalAudioPipeline.size(),
+        auditLog: globalAudioPipeline.getAuditLog(),
+      });
+    }
+
+    if (body.type === "clear_pipecat_pipeline") {
+      globalAudioPipeline.clear();
+      return NextResponse.json({ ok: true, queueSize: 0 });
     }
 
     const rawUserMessage = body.message;

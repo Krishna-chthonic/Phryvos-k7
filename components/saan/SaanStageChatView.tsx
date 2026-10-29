@@ -77,6 +77,7 @@ import { SaanSecurityFenceModal } from "./SaanSecurityFenceModal";
 import { SaanAccessibilityTreeModal } from "./SaanAccessibilityTreeModal";
 import { SaanStealthHeadersModal } from "./SaanStealthHeadersModal";
 import { SaanMcpExplorerModal } from "./SaanMcpExplorerModal";
+import { SaanStreamingFrameModal } from "./SaanStreamingFrameModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -253,6 +254,10 @@ export function SaanStageChatView({
 
   // Model Context Protocol (MCP 2.x) Bridge State
   const [isMcpModalOpen, setIsMcpModalOpen] = React.useState(false);
+
+  // Pipecat Low-Latency Audio Streaming Pipeline State
+  const [isPipecatModalOpen, setIsPipecatModalOpen] = React.useState(false);
+  const [pipecatQueueCount, setPipecatQueueCount] = React.useState(2);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1552,6 +1557,22 @@ export function SaanStageChatView({
                 <Cpu className="w-3.5 h-3.5 text-violet-400" />
                 <span>MCP</span>
               </button>
+
+              {/* Pipecat: Real-Time Audio Streaming Pipeline Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsPipecatModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-yellow-950/40 text-yellow-300 border border-zinc-800 hover:border-yellow-500/40 transition cursor-pointer"
+                title="Inspect Pipecat Real-Time Audio Streaming Frame Pipeline & Barge-In Mutex (Repo #36)"
+              >
+                <Zap className="w-3.5 h-3.5 text-yellow-400" />
+                <span>Pipecat</span>
+                {pipecatQueueCount > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                    {pipecatQueueCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2439,6 +2460,13 @@ export function SaanStageChatView({
       <SaanMcpExplorerModal
         isOpen={isMcpModalOpen}
         onClose={() => setIsMcpModalOpen(false)}
+      />
+
+      {/* Pipecat Low-Latency Audio Streaming Pipeline Modal */}
+      <SaanStreamingFrameModal
+        isOpen={isPipecatModalOpen}
+        onClose={() => setIsPipecatModalOpen(false)}
+        onQueueSizeChange={(cnt) => setPipecatQueueCount(cnt)}
       />
     </div>
   );

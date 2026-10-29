@@ -14,6 +14,7 @@ import {
   BookmarkCheck,
   Film,
   Zap,
+  Crown,
   Flame,
   Brain,
   Timer,
@@ -92,6 +93,7 @@ import { SaanDocumentCollectorModal } from "./SaanDocumentCollectorModal";
 import { SaanMemoryBenchmarkModal } from "./SaanMemoryBenchmarkModal";
 import { SaanContradictionGraphModal } from "./SaanContradictionGraphModal";
 import { SaanMemorySelfEditModal } from "./SaanMemorySelfEditModal";
+import { SaanCapstoneAuditModal } from "./SaanCapstoneAuditModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -299,6 +301,7 @@ export function SaanStageChatView({
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = React.useState(false);
   const [isContradictionModalOpen, setIsContradictionModalOpen] = React.useState(false);
   const [isSelfEditModalOpen, setIsSelfEditModalOpen] = React.useState(false);
+  const [isCapstoneModalOpen, setIsCapstoneModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1748,6 +1751,19 @@ export function SaanStageChatView({
                 <Brain className="w-3.5 h-3.5 text-fuchsia-400" />
                 <span>SelfEdit</span>
               </button>
+
+              {/* Mem0 & 50-Repo Grand Capstone Audit Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsCapstoneModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-gradient-to-r from-amber-950/60 to-yellow-950/60 hover:from-amber-900/80 hover:to-yellow-900/80 text-amber-300 border border-amber-500/50 hover:border-amber-400 transition cursor-pointer shadow-lg shadow-amber-500/10"
+                title="Inspect 50 Companion Repositories Capstone Audit & Prompt Injection Sanitizer (Repo #50)"
+              >
+                <Crown className="w-3.5 h-3.5 text-amber-400" />
+                <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-400">
+                  Capstone
+                </span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2731,6 +2747,12 @@ export function SaanStageChatView({
       <SaanMemorySelfEditModal
         isOpen={isSelfEditModalOpen}
         onClose={() => setIsSelfEditModalOpen(false)}
+      />
+
+      {/* 50 Companion Repositories Grand Capstone Audit Modal */}
+      <SaanCapstoneAuditModal
+        isOpen={isCapstoneModalOpen}
+        onClose={() => setIsCapstoneModalOpen(false)}
       />
     </div>
   );

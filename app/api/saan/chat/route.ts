@@ -87,7 +87,12 @@ import {
 } from "@/lib/saan/graph-memory";
 import { globalChatVariables } from "@/lib/saan/chat-variables";
 import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
-import { getMem0AuditLog } from "@/lib/saan/mem0-decision-matrix";
+import {
+  getMem0AuditLog,
+  getCapstoneAuditReport,
+  SAAN_50_REPO_CAPSTONE_REGISTRY,
+  sanitizePromptInjection,
+} from "@/lib/saan/mem0-decision-matrix";
 import { getTemporalEdgeGraphStore } from "@/lib/saan/temporal-edge-graph";
 import { getCognifyPipelineManager } from "@/lib/saan/cognify-pipeline";
 import {
@@ -1331,6 +1336,24 @@ export async function POST(req: NextRequest) {
         blocks: memManager.getAllBlocks(),
         capacity: memManager.getCapacitySummary(),
         history: memManager.getHistory(),
+      });
+    }
+
+    // Mem0 Prompt Injection Sanitizer & Grand 50-Repo Capstone (Repo #50) Endpoints
+    if (body.type === "get_capstone_audit") {
+      const report = getCapstoneAuditReport();
+      return NextResponse.json({
+        ok: true,
+        report,
+        registry: SAAN_50_REPO_CAPSTONE_REGISTRY,
+      });
+    }
+
+    if (body.type === "test_prompt_injection" && body.text !== undefined) {
+      const result = sanitizePromptInjection(body.text);
+      return NextResponse.json({
+        ok: true,
+        result,
       });
     }
 

@@ -551,4 +551,70 @@ export class ObservableActionStream {
       error: `Exceeded maxIterations (${this.maxIterations})`,
     };
   }
+
+  /**
+   * Helper to append a standalone ActionEvent with observation.
+   */
+  public recordToolCall(
+    toolName: string,
+    payload: Record<string, any>,
+    output: string,
+    options?: {
+      thought?: string[];
+      isError?: boolean;
+      securityRisk?: "LOW" | "MEDIUM" | "HIGH";
+    }
+  ): { action: ActionEvent; observation: ObservationEvent } {
+    const actionId = `act-${crypto.randomUUID().slice(0, 8)}`;
+    const toolCallId = `call-${crypto.randomUUID().slice(0, 8)}`;
+
+    const action: ActionEvent = {
+      kind: "action",
+      id: actionId,
+      toolCallId,
+      toolName,
+      actionPayload: payload,
+      thought: options?.thought || [`Executing ${toolName} with parameters`],
+      securityRisk: options?.securityRisk || "LOW",
+      timestamp: new Date().toISOString(),
+    };
+
+    const observation: ObservationEvent = {
+      kind: "observation",
+      id: `obs-${crypto.randomUUID().slice(0, 8)}`,
+      actionId,
+      toolCallId,
+      content: output,
+      isError: options?.isError ?? false,
+      timestamp: new Date().toISOString(),
+    };
+
+    this.recordEvent(action);
+    this.recordEvent(observation);
+
+    return { action, observation };
+  }
 }
+
+let globalActionStream: ObservableActionStream | null = null;
+
+export function getObservableActionStream(): ObservableActionStream {
+  if (!globalActionStream) {
+    globalActionStream = new ObservableActionStream();
+    // Seed initial representative trace
+    globalActionStream.recordToolCall(
+      "search_memory",
+      { query: "user chai preferences", limit: 3 },
+      "Found 3 matching memories: [adrak chai preference, evening study ritual, less sugar]",
+      { thought: ["Need to check past beverage preferences before proposing evening study plan."], securityRisk: "LOW" }
+    );
+    globalActionStream.recordToolCall(
+      "verify_temporal_bounds",
+      { date: new Date().toISOString().slice(0, 10), reference: "now" },
+      "Temporal bounds verified: Anchor aligned with active conversation window.",
+      { thought: ["Verify temporal context against physical system time."], securityRisk: "LOW" }
+    );
+  }
+  return globalActionStream;
+}
+

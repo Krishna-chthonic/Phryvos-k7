@@ -75,6 +75,7 @@ import {
   type GnosysMemoryEdge,
 } from "@/lib/saan/portable-memory-spec";
 import { getWorkingScratchpadManager } from "@/lib/saan/working-scratchpad";
+import { getObservableActionStream } from "@/lib/saan/observable-action-stream";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -430,6 +431,50 @@ export async function POST(req: NextRequest) {
       const spMgr = getWorkingScratchpadManager();
       const steps = spMgr.simulateReasoningTrace(body.prompt, "Saan");
       return NextResponse.json({ ok: true, steps, current: spMgr.getCurrentSession() });
+    }
+
+    // OpenHands Observable Action Stream Endpoints
+    if (body.type === "get_action_stream") {
+      const stream = getObservableActionStream();
+      const events = stream.getEvents();
+      const actionsCount = events.filter((e) => e.kind === "action").length;
+      const obsCount = events.filter((e) => e.kind === "observation").length;
+      const errorCount = events.filter((e) => e.kind === "observation" && (e as any).isError).length;
+      const rejectCount = events.filter((e) => e.kind === "user_reject").length;
+
+      return NextResponse.json({
+        ok: true,
+        events,
+        stats: {
+          totalEvents: events.length,
+          actionsCount,
+          obsCount,
+          errorCount,
+          rejectCount,
+        },
+      });
+    }
+
+    if (body.type === "simulate_action_stream" && body.action) {
+      const stream = getObservableActionStream();
+      const toolName = body.action.toolName || "system_diagnostic";
+      const payload = body.action.payload || { check: "sqlite_vault_integrity" };
+      const thought = body.action.thought || ["Inspecting local system state"];
+      const output = body.action.output || "Diagnostics PASSED: All local databases and vector models operational.";
+
+      const res = stream.recordToolCall(toolName, payload, output, {
+        thought,
+        isError: body.action.isError || false,
+        securityRisk: body.action.securityRisk || "LOW",
+      });
+
+      return NextResponse.json({ ok: true, recorded: res, events: stream.getEvents() });
+    }
+
+    if (body.type === "clear_action_stream") {
+      const stream = getObservableActionStream();
+      stream.clear();
+      return NextResponse.json({ ok: true });
     }
 
     const rawUserMessage = body.message;

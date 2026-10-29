@@ -39,6 +39,7 @@ import {
   Inbox,
   HardDriveDownload,
   BrainCircuit,
+  Activity,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -49,6 +50,7 @@ import { SaanProfileExtractorModal } from "./SaanProfileExtractorModal";
 import { SaanBufferedQueueModal } from "./SaanBufferedQueueModal";
 import { SaanPortableMemoryModal } from "./SaanPortableMemoryModal";
 import { SaanWorkingScratchpadModal } from "./SaanWorkingScratchpadModal";
+import { SaanActionTimelineModal } from "./SaanActionTimelineModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -173,6 +175,9 @@ export function SaanStageChatView({
 
   // MemGPT v2 Working Scratchpad State
   const [isScratchpadOpen, setIsScratchpadOpen] = React.useState(false);
+
+  // OpenHands Observable Action Stream State
+  const [isActionTimelineOpen, setIsActionTimelineOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1276,6 +1281,17 @@ export function SaanStageChatView({
                 <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
                 <span>Scratchpad</span>
               </button>
+
+              {/* OpenHands: Visual Action Execution Timeline Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsActionTimelineOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-orange-950/40 text-orange-300 border border-zinc-800 hover:border-orange-500/40 transition cursor-pointer"
+                title="Inspect Visual Action Execution Timeline (OpenHands Engine)"
+              >
+                <Activity className="w-3.5 h-3.5 text-orange-400" />
+                <span>Timeline</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2063,6 +2079,12 @@ export function SaanStageChatView({
       <SaanWorkingScratchpadModal
         isOpen={isScratchpadOpen}
         onClose={() => setIsScratchpadOpen(false)}
+      />
+
+      {/* OpenHands Observable Action Stream Timeline Modal */}
+      <SaanActionTimelineModal
+        isOpen={isActionTimelineOpen}
+        onClose={() => setIsActionTimelineOpen(false)}
       />
     </div>
   );

@@ -29,7 +29,9 @@ import {
   globalWebSecurityFence,
   globalWebSecurityAuditor,
   globalAccessibilityParser,
+  globalStealthGenerator,
 } from "@/lib/saan/controller";
+import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
 import { pickReaction, splitBurst, calculateReplyDelay } from "@/lib/saan/humanize";
@@ -860,6 +862,34 @@ export async function POST(req: NextRequest) {
     if (body.type === "clear_accessibility_history") {
       globalAccessibilityParser.clearHistory();
       return NextResponse.json({ ok: true });
+    }
+
+    // Playwright Stealth Anti-Bot Headers (Repo #34) Endpoints
+    if (body.type === "get_stealth_profiles") {
+      const activePreset: DevicePreset = body.preset || "desktop-chrome-linux";
+      const profile = globalStealthGenerator.getProfile(activePreset);
+      const headers = globalStealthGenerator.generateHeaders(activePreset);
+      return NextResponse.json({
+        ok: true,
+        presets: Object.keys(DEVICE_PROFILES),
+        profiles: DEVICE_PROFILES,
+        activePreset,
+        activeProfile: profile,
+        activeHeaders: headers,
+      });
+    }
+
+    if (body.type === "generate_stealth_headers") {
+      const preset: DevicePreset = body.preset || "desktop-chrome-linux";
+      const overrides = body.overrides || {};
+      const profile = globalStealthGenerator.getProfile(preset);
+      const headers = globalStealthGenerator.generateHeaders(preset, overrides);
+      return NextResponse.json({
+        ok: true,
+        preset,
+        profile,
+        headers,
+      });
     }
 
     const rawUserMessage = body.message;

@@ -49,6 +49,7 @@ import {
   Webhook,
   Globe,
   Target,
+  EyeOff,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -73,6 +74,7 @@ import { SaanMetasearchCitationModal } from "./SaanMetasearchCitationModal";
 import { SaanCleanMarkdownModal } from "./SaanCleanMarkdownModal";
 import { SaanSecurityFenceModal } from "./SaanSecurityFenceModal";
 import { SaanAccessibilityTreeModal } from "./SaanAccessibilityTreeModal";
+import { SaanStealthHeadersModal } from "./SaanStealthHeadersModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -243,6 +245,9 @@ export function SaanStageChatView({
 
   // Browser-Use Accessibility DOM Tree State
   const [isAccessibilityTreeOpen, setIsAccessibilityTreeOpen] = React.useState(false);
+
+  // Playwright Stealth Anti-Bot Headers State
+  const [isStealthModalOpen, setIsStealthModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1520,6 +1525,17 @@ export function SaanStageChatView({
                 <Target className="w-3.5 h-3.5 text-emerald-400" />
                 <span>DOMTree</span>
               </button>
+
+              {/* Playwright: Stealth Anti-Bot Headers Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsStealthModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Inspect Playwright Stealth Anti-Bot HTTP Header Synthesis & Fingerprints (Repo #34)"
+              >
+                <EyeOff className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Stealth</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2395,6 +2411,12 @@ export function SaanStageChatView({
       <SaanAccessibilityTreeModal
         isOpen={isAccessibilityTreeOpen}
         onClose={() => setIsAccessibilityTreeOpen(false)}
+      />
+
+      {/* Playwright Stealth Anti-Bot Headers Modal */}
+      <SaanStealthHeadersModal
+        isOpen={isStealthModalOpen}
+        onClose={() => setIsStealthModalOpen(false)}
       />
     </div>
   );

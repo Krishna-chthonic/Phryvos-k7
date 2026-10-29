@@ -40,6 +40,7 @@ import {
   HardDriveDownload,
   BrainCircuit,
   Activity,
+  Wrench,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -51,6 +52,7 @@ import { SaanBufferedQueueModal } from "./SaanBufferedQueueModal";
 import { SaanPortableMemoryModal } from "./SaanPortableMemoryModal";
 import { SaanWorkingScratchpadModal } from "./SaanWorkingScratchpadModal";
 import { SaanActionTimelineModal } from "./SaanActionTimelineModal";
+import { SaanDirtyJsonDebugModal } from "./SaanDirtyJsonDebugModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -178,6 +180,9 @@ export function SaanStageChatView({
 
   // OpenHands Observable Action Stream State
   const [isActionTimelineOpen, setIsActionTimelineOpen] = React.useState(false);
+
+  // AutoGPT Dirty JSON Repair Debug State
+  const [isJsonDebugOpen, setIsJsonDebugOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1292,6 +1297,17 @@ export function SaanStageChatView({
                 <Activity className="w-3.5 h-3.5 text-orange-400" />
                 <span>Timeline</span>
               </button>
+
+              {/* AutoGPT: Dirty JSON Repair Debug Drawer Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsJsonDebugOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Inspect Dirty JSON Repair Drawer & Split View (AutoGPT & Agent Zero Engine)"
+              >
+                <Wrench className="w-3.5 h-3.5 text-emerald-400" />
+                <span>JsonRepair</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2085,6 +2101,12 @@ export function SaanStageChatView({
       <SaanActionTimelineModal
         isOpen={isActionTimelineOpen}
         onClose={() => setIsActionTimelineOpen(false)}
+      />
+
+      {/* AutoGPT Dirty JSON Repair Debug Drawer Modal */}
+      <SaanDirtyJsonDebugModal
+        isOpen={isJsonDebugOpen}
+        onClose={() => setIsJsonDebugOpen(false)}
       />
     </div>
   );

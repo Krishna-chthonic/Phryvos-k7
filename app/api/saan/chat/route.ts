@@ -76,6 +76,7 @@ import {
 } from "@/lib/saan/portable-memory-spec";
 import { getWorkingScratchpadManager } from "@/lib/saan/working-scratchpad";
 import { getObservableActionStream } from "@/lib/saan/observable-action-stream";
+import { DirtyJsonRepairEngine, getDirtyJsonRepairAuditor } from "@/lib/saan/dirty-json-repair";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -474,6 +475,27 @@ export async function POST(req: NextRequest) {
     if (body.type === "clear_action_stream") {
       const stream = getObservableActionStream();
       stream.clear();
+      return NextResponse.json({ ok: true });
+    }
+
+    // AutoGPT & Agent-Zero Dirty JSON Repair Endpoints
+    if (body.type === "get_dirty_json_audit") {
+      const auditor = getDirtyJsonRepairAuditor();
+      const events = auditor.getEvents();
+      const stats = auditor.getStats();
+      return NextResponse.json({ ok: true, events, stats });
+    }
+
+    if (body.type === "test_dirty_json_repair" && typeof body.raw === "string") {
+      const result = DirtyJsonRepairEngine.repairAndParse(body.raw);
+      const auditor = getDirtyJsonRepairAuditor();
+      const recorded = auditor.recordRepair(body.raw, result);
+      return NextResponse.json({ ok: true, result, recorded, stats: auditor.getStats() });
+    }
+
+    if (body.type === "clear_dirty_json_audit") {
+      const auditor = getDirtyJsonRepairAuditor();
+      auditor.clear();
       return NextResponse.json({ ok: true });
     }
 

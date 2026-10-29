@@ -48,6 +48,7 @@ import { IncrementalSummaryManager, type MessagePayload } from "./incremental-su
 import { BufferedMemoryQueue } from "./buffered-memory-queue";
 import { GnosysMemoryPortabilityEngine } from "./portable-memory-spec";
 import { MemobaseProfileManager, type ProfileAttribute } from "./profile-extractor";
+import { DirtyJsonRepairEngine, getDirtyJsonRepairAuditor } from "./dirty-json-repair";
 import { AssociativeMemoryNetwork, type MemoryNote } from "./associative-memory-network";
 import { MemoryEvalJudge, type Verdict, normalise, stringMatch } from "./memory-eval-judge";
 import {
@@ -229,11 +230,21 @@ export interface RollbackSnapshot {
 const activeSnapshots = new Map<string, RollbackSnapshot>();
 
 /**
- * Fault-Tolerant JSON Parser (Agent Zero pattern)
- * Repairs common LLM JSON syntax errors: trailing commas, single quotes, unescaped newlines
+ * Fault-Tolerant JSON Parser (Agent Zero & AutoGPT pattern)
+ * Repairs common LLM JSON syntax errors: trailing commas, single quotes, unescaped newlines,
+ * unquoted keys, Python literals, and records audit trace in DirtyJsonRepairAuditor.
  */
 export function parseDirtyJson(raw: string): any {
   if (!raw || typeof raw !== "string") return null;
+
+  // Run through comprehensive AutoGPT / Agent Zero repair engine
+  const repairRes = DirtyJsonRepairEngine.repairAndParse(raw);
+  const auditor = getDirtyJsonRepairAuditor();
+  auditor.recordRepair(raw, repairRes);
+
+  if (repairRes.success) {
+    return repairRes.data;
+  }
 
   let cleaned = raw.trim();
 

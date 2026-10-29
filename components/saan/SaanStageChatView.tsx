@@ -269,6 +269,7 @@ export function SaanStageChatView({
 
   // Whisper Multilingual ASR Normalizer State
   const [isWhisperModalOpen, setIsWhisperModalOpen] = React.useState(false);
+  const [asrLanguage, setAsrLanguage] = React.useState<string>("hinglish");
 
   // Kokoro Circadian Cadence & Pacing State
   const [isKokoroModalOpen, setIsKokoroModalOpen] = React.useState(false);
@@ -982,7 +983,17 @@ export function SaanStageChatView({
       const recog = new SpeechRecognition();
       recog.continuous = false;
       recog.interimResults = false;
-      recog.lang = "hi-IN";
+      const bcp47Map: Record<string, string> = {
+        auto: "en-US",
+        hinglish: "hi-IN",
+        hi: "hi-IN",
+        en: "en-US",
+        ja: "ja-JP",
+        es: "es-ES",
+        fr: "fr-FR",
+        de: "de-DE",
+      };
+      recog.lang = bcp47Map[asrLanguage] || "hi-IN";
 
       recog.onstart = () => {
         setIsListening(true);
@@ -1633,6 +1644,26 @@ export function SaanStageChatView({
                 audioLevel={audioLevel}
                 onToggleMic={toggleListening}
               />
+
+              {/* Whisper ASR Multilingual Language Selector (Repo #40) */}
+              <div className="relative inline-flex items-center">
+                <select
+                  value={asrLanguage}
+                  onChange={(e) => setAsrLanguage(e.target.value)}
+                  aria-label="Whisper ASR Recognition Language"
+                  className="bg-zinc-900 border border-zinc-800 hover:border-teal-500/40 text-teal-300 text-xs font-mono rounded-lg px-2 py-1 outline-none transition cursor-pointer"
+                  title="Whisper Multilingual ASR Recognition Language (Repo #40)"
+                >
+                  <option value="hinglish">🇮🇳 Hinglish</option>
+                  <option value="hi">🇮🇳 Hindi</option>
+                  <option value="en">🇬🇧 English</option>
+                  <option value="ja">🇯🇵 Japanese</option>
+                  <option value="es">🇪🇸 Spanish</option>
+                  <option value="fr">🇫🇷 French</option>
+                  <option value="de">🇩🇪 German</option>
+                  <option value="auto">🌐 Auto-Detect</option>
+                </select>
+              </div>
 
               {ttfaMs && (
                 <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-1 rounded-xl border border-zinc-800">

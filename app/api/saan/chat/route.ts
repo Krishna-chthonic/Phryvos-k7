@@ -1051,6 +1051,22 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (body.type === "detect_whisper_language" && body.text !== undefined) {
+      const result = globalWhisperNormalizer.detectLanguage(body.text);
+      return NextResponse.json({
+        ok: true,
+        ...result,
+      });
+    }
+
+    if (body.type === "split_whisper_vad" && body.text !== undefined) {
+      const segments = globalWhisperNormalizer.splitIntoVadSegments(body.text, body.maxWords);
+      return NextResponse.json({
+        ok: true,
+        segments,
+      });
+    }
+
     // Kokoro TTS Circadian Cadence & Pacing (Repo #39) Endpoints
     if (body.type === "get_cadence_settings") {
       const settings = globalCadenceEngine.getCadenceSettings(body.hourOfDay);

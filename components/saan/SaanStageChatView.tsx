@@ -47,6 +47,7 @@ import {
   Compass,
   ShieldAlert,
   Webhook,
+  Globe,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -67,6 +68,7 @@ import { SaanResearchWorkflowModal } from "./SaanResearchWorkflowModal";
 import { SaanConfirmationGateModal } from "./SaanConfirmationGateModal";
 import { SaanRetryTelemetryModal } from "./SaanRetryTelemetryModal";
 import { SaanLifecycleHookModal } from "./SaanLifecycleHookModal";
+import { SaanMetasearchCitationModal } from "./SaanMetasearchCitationModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -224,6 +226,9 @@ export function SaanStageChatView({
   // Huginn Agent Lifecycle Hooks Registry State
   const [isLifecycleHookOpen, setIsLifecycleHookOpen] = React.useState(false);
   const [activeHookCount, setActiveHookCount] = React.useState(6);
+
+  // SearXNG & Khoj Privacy Metasearch State
+  const [isMetasearchOpen, setIsMetasearchOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1452,6 +1457,17 @@ export function SaanStageChatView({
                   </span>
                 )}
               </button>
+
+              {/* SearXNG & Khoj: Privacy Metasearch & Query Decomposition Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsMetasearchOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-blue-950/40 text-blue-300 border border-zinc-800 hover:border-blue-500/40 transition cursor-pointer"
+                title="Inspect SearXNG & Khoj Privacy Metasearch & Query Decomposition (Repos #29 & #30)"
+              >
+                <Globe className="w-3.5 h-3.5 text-blue-400" />
+                <span>MetaSearch</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2302,6 +2318,12 @@ export function SaanStageChatView({
         isOpen={isLifecycleHookOpen}
         onClose={() => setIsLifecycleHookOpen(false)}
         onActiveHooksChange={(cnt) => setActiveHookCount(cnt)}
+      />
+
+      {/* SearXNG & Khoj Privacy Metasearch Modal */}
+      <SaanMetasearchCitationModal
+        isOpen={isMetasearchOpen}
+        onClose={() => setIsMetasearchOpen(false)}
       />
     </div>
   );

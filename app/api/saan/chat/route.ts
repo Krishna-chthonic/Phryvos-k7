@@ -23,6 +23,7 @@ import {
   globalGateManager,
   globalIdempotencyEngine,
   globalLifecycleHookManager,
+  globalMetasearchAggregator,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -740,6 +741,23 @@ export async function POST(req: NextRequest) {
         ok: true,
         result,
         auditLog: globalLifecycleHookManager.getAuditLog(),
+      });
+    }
+
+    // SearXNG & Khoj Metasearch & Query Decomposition (Repos #29 & #30) Endpoints
+    if (body.type === "get_metasearch_state") {
+      return NextResponse.json({
+        ok: true,
+        history: globalMetasearchAggregator.getSearchHistory(),
+      });
+    }
+
+    if (body.type === "execute_metasearch" && body.query) {
+      const simulation = globalMetasearchAggregator.simulateMetasearch(body.query, body.options || {});
+      return NextResponse.json({
+        ok: true,
+        ...simulation,
+        history: globalMetasearchAggregator.getSearchHistory(),
       });
     }
 

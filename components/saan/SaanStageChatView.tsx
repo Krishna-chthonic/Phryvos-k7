@@ -83,6 +83,7 @@ import { SaanVoiceFsmModal } from "./SaanVoiceFsmModal";
 import { SaanWhisperAsrModal } from "./SaanWhisperAsrModal";
 import { SaanKokoroCadenceModal } from "./SaanKokoroCadenceModal";
 import { SaanPreflightPipelineModal } from "./SaanPreflightPipelineModal";
+import { SaanArtifactReasoningModal } from "./SaanArtifactReasoningModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -277,6 +278,9 @@ export function SaanStageChatView({
 
   // Open-WebUI Preflight Filter Valves & Generation Parameters State
   const [isPreflightModalOpen, setIsPreflightModalOpen] = React.useState(false);
+
+  // LibreChat Modular Artifacts & HuggingFace CoT Reasoning State
+  const [isArtifactsModalOpen, setIsArtifactsModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1649,6 +1653,17 @@ export function SaanStageChatView({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Preflight</span>
               </button>
+
+              {/* LibreChat & HuggingFace: Modular Artifacts & CoT Reasoning Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsArtifactsModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Inspect LibreChat Modular Artifacts & HuggingFace CoT Reasoning (Repos #42 & #43)"
+              >
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Artifacts</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2588,6 +2603,12 @@ export function SaanStageChatView({
       <SaanPreflightPipelineModal
         isOpen={isPreflightModalOpen}
         onClose={() => setIsPreflightModalOpen(false)}
+      />
+
+      {/* LibreChat Modular Artifacts & HuggingFace CoT Reasoning Modal */}
+      <SaanArtifactReasoningModal
+        isOpen={isArtifactsModalOpen}
+        onClose={() => setIsArtifactsModalOpen(false)}
       />
     </div>
   );

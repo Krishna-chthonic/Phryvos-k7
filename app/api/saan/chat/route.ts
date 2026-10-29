@@ -36,6 +36,7 @@ import {
   globalWhisperNormalizer,
   globalCadenceEngine,
   globalPreflightPipeline,
+  globalArtifactReasoningEngine,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1107,6 +1108,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         result,
+      });
+    }
+
+    // Modular Interactive Artifacts & Reasoning Accordion (Repos #42 & #43) Endpoints
+    if (body.type === "extract_artifacts_and_reasoning" && body.text !== undefined) {
+      const reasoning = globalArtifactReasoningEngine.extractReasoning(body.text);
+      const artifacts = globalArtifactReasoningEngine.extractArtifacts(body.text);
+      const citations = globalArtifactReasoningEngine.extractCitations(body.text);
+      return NextResponse.json({
+        ok: true,
+        reasoning,
+        artifacts,
+        citations,
       });
     }
 

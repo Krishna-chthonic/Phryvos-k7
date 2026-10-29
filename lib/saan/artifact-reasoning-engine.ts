@@ -61,7 +61,7 @@ export class ArtifactReasoningEngine {
 
   /**
    * Extracts structured interactive artifacts from response content.
-   * Supports XML style `<artifact ...>...</artifact>` and fence markers.
+   * Supports XML style `<artifact ...>...</artifact>` and standard markdown code fences.
    */
   public extractArtifacts(text: string): ParsedArtifact[] {
     if (!text || typeof text !== 'string') return [];
@@ -119,6 +119,49 @@ export class ArtifactReasoningEngine {
       });
     }
 
+    // Fallback: If no explicit XML <artifact> tags, extract prominent markdown code blocks
+    if (artifacts.length === 0) {
+      const codeBlockRegex = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
+      let codeMatch: RegExpExecArray | null;
+      let codeIdx = 0;
+
+      while ((codeMatch = codeBlockRegex.exec(text)) !== null) {
+        codeIdx++;
+        const lang = (codeMatch[1] || 'text').toLowerCase();
+        const codeContent = codeMatch[2].trim();
+
+        if (codeContent.length > 20) {
+          let type: ParsedArtifact['type'] = 'code';
+          let mime = 'text/x-code';
+          let ext = lang;
+
+          if (lang === 'mermaid') {
+            type = 'mermaid';
+            mime = 'application/vnd.mermaid';
+            ext = 'mmd';
+          } else if (lang === 'html') {
+            type = 'html';
+            mime = 'text/html';
+          } else if (lang === 'markdown' || lang === 'md') {
+            type = 'markdown';
+            mime = 'text/markdown';
+            ext = 'md';
+          }
+
+          artifacts.push({
+            id: `art_code_${codeIdx}`,
+            identifier: `snippet-${codeIdx}`,
+            title: `${lang.toUpperCase()} Snippet #${codeIdx}`,
+            type,
+            mimeType: mime,
+            language: lang,
+            content: codeContent,
+            filename: `snippet-${codeIdx}.${ext}`,
+          });
+        }
+      }
+    }
+
     return artifacts;
   }
 
@@ -160,3 +203,6 @@ export class ArtifactReasoningEngine {
     return match ? match[1] : null;
   }
 }
+
+export const globalArtifactReasoningEngine = new ArtifactReasoningEngine();
+

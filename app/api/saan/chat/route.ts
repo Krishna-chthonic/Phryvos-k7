@@ -18,6 +18,7 @@ import {
   dispatchSaanAction,
   type SaanActionResult,
   globalAssociativeNetwork,
+  globalLeaseManager,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -585,6 +586,41 @@ export async function POST(req: NextRequest) {
         ok: true,
         note,
         notes: globalAssociativeNetwork.getAllNotes(),
+      });
+    }
+
+    // CrewAI Resilient State Lease (Repo #24) Endpoints
+    if (body.type === "get_state_leases") {
+      return NextResponse.json({
+        ok: true,
+        leases: globalLeaseManager.getAllActiveLeases(),
+        metrics: globalLeaseManager.getMetrics(),
+      });
+    }
+
+    if (body.type === "acquire_state_lease" && body.resource && body.owner) {
+      const handle = globalLeaseManager.acquireLease(
+        body.resource,
+        body.owner,
+        body.ttlMs || 10_000
+      );
+      return NextResponse.json({
+        ok: !!handle,
+        lease: handle ? {
+          resource: handle.resource,
+          owner: handle.owner,
+          expiresAt: handle.expiresAt,
+          fencingToken: handle.fencingToken,
+        } : null,
+        metrics: globalLeaseManager.getMetrics(),
+      });
+    }
+
+    if (body.type === "preempt_state_lease" && body.resource) {
+      const preempted = globalLeaseManager.forcePreempt(body.resource);
+      return NextResponse.json({
+        ok: preempted,
+        metrics: globalLeaseManager.getMetrics(),
       });
     }
 

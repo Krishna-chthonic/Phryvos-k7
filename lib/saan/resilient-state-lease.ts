@@ -148,13 +148,27 @@ export interface LeaseHandle {
   resource: string;
   owner: string;
   expiresAt: number;
+  fencingToken: number;
   renew: (extendMs: number) => void;
   release: () => void;
   isExpired: () => boolean;
 }
 
+export interface ActiveLeaseRecord {
+  resource: string;
+  owner: string;
+  expiresAt: number;
+  remainingMs: number;
+  fencingToken: number;
+  renewalCount: number;
+}
+
 export class LeaseLockManager {
-  private leases: Map<string, { owner: string; expiresAt: number }> = new Map();
+  private leases: Map<string, { owner: string; expiresAt: number; fencingToken: number; renewalCount: number }> = new Map();
+  private fencingSequences: Map<string, number> = new Map();
+  private totalAcquisitions = 0;
+  private totalRenewals = 0;
+  private totalPreemptions = 0;
 
   public acquireLease(resource: string, owner: string, ttlMs = 10000): LeaseHandle | null {
     const now = Date.now();
@@ -164,18 +178,29 @@ export class LeaseLockManager {
       return null; // Resource locked by another owner
     }
 
+    if (existing && existing.expiresAt <= now) {
+      this.totalPreemptions++;
+    }
+
+    const currentSeq = (this.fencingSequences.get(resource) || 100) + 1;
+    this.fencingSequences.set(resource, currentSeq);
+
     const expiresAt = now + ttlMs;
-    this.leases.set(resource, { owner, expiresAt });
+    this.leases.set(resource, { owner, expiresAt, fencingToken: currentSeq, renewalCount: 0 });
+    this.totalAcquisitions++;
 
     const handle: LeaseHandle = {
       resource,
       owner,
       expiresAt,
+      fencingToken: currentSeq,
       renew: (extendMs: number) => {
         const cur = this.leases.get(resource);
-        if (cur && cur.owner === owner) {
+        if (cur && cur.owner === owner && cur.expiresAt > Date.now()) {
           cur.expiresAt = Date.now() + extendMs;
+          cur.renewalCount++;
           handle.expiresAt = cur.expiresAt;
+          this.totalRenewals++;
         }
       },
       release: () => {
@@ -191,6 +216,65 @@ export class LeaseLockManager {
     };
 
     return handle;
+  }
+
+  public getAllActiveLeases(): ActiveLeaseRecord[] {
+    const now = Date.now();
+    const active: ActiveLeaseRecord[] = [];
+    for (const [resource, lease] of this.leases.entries()) {
+      if (lease.expiresAt > now) {
+        active.push({
+          resource,
+          owner: lease.owner,
+          expiresAt: lease.expiresAt,
+          remainingMs: Math.max(0, lease.expiresAt - now),
+          fencingToken: lease.fencingToken,
+          renewalCount: lease.renewalCount,
+        });
+      } else {
+        this.leases.delete(resource);
+      }
+    }
+    return active;
+  }
+
+  public forcePreempt(resource: string): boolean {
+    if (this.leases.has(resource)) {
+      this.leases.delete(resource);
+      this.totalPreemptions++;
+      return true;
+    }
+    return false;
+  }
+
+  public validateFencingToken(resource: string, token: number): boolean {
+    const seq = this.fencingSequences.get(resource) || 100;
+    return token >= seq;
+  }
+
+  public getMetrics(): {
+    activeCount: number;
+    totalAcquisitions: number;
+    totalRenewals: number;
+    totalPreemptions: number;
+    fencingTokens: Record<string, number>;
+  } {
+    const active = this.getAllActiveLeases();
+    const fencingTokens: Record<string, number> = {};
+    for (const [r, seq] of this.fencingSequences.entries()) {
+      fencingTokens[r] = seq;
+    }
+    return {
+      activeCount: active.length,
+      totalAcquisitions: this.totalAcquisitions,
+      totalRenewals: this.totalRenewals,
+      totalPreemptions: this.totalPreemptions,
+      fencingTokens,
+    };
+  }
+
+  public clear(): void {
+    this.leases.clear();
   }
 }
 

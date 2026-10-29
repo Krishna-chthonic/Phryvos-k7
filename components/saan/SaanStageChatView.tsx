@@ -43,6 +43,7 @@ import {
   Wrench,
   Scale,
   Workflow,
+  Lock,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -58,6 +59,7 @@ import { SaanDirtyJsonDebugModal } from "./SaanDirtyJsonDebugModal";
 import { SaanProactiveTriggerModal } from "./SaanProactiveTriggerModal";
 import { SaanMemoryEvalJudgeModal } from "./SaanMemoryEvalJudgeModal";
 import { SaanAssociativeNetworkModal } from "./SaanAssociativeNetworkModal";
+import { SaanStateLeaseModal } from "./SaanStateLeaseModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -197,6 +199,9 @@ export function SaanStageChatView({
 
   // AssociativeMemory Spreading Activation Network State
   const [isAssociativeNetworkOpen, setIsAssociativeNetworkOpen] = React.useState(false);
+
+  // CrewAI Resilient State Lease Mutex State
+  const [isStateLeaseOpen, setIsStateLeaseOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1355,6 +1360,17 @@ export function SaanStageChatView({
                 <Workflow className="w-3.5 h-3.5 text-violet-400" />
                 <span>AssocWeb</span>
               </button>
+
+              {/* CrewAI: Distributed State Lease & Mutex Manager Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsStateLeaseOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
+                title="Inspect Distributed State Lease Mutex & Fencing Tokens (CrewAI Engine)"
+              >
+                <Lock className="w-3.5 h-3.5 text-teal-400" />
+                <span>LeaseLock</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2172,6 +2188,12 @@ export function SaanStageChatView({
       <SaanAssociativeNetworkModal
         isOpen={isAssociativeNetworkOpen}
         onClose={() => setIsAssociativeNetworkOpen(false)}
+      />
+
+      {/* CrewAI Distributed State Lease Mutex Modal */}
+      <SaanStateLeaseModal
+        isOpen={isStateLeaseOpen}
+        onClose={() => setIsStateLeaseOpen(false)}
       />
     </div>
   );

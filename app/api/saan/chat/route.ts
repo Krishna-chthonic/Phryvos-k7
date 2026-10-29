@@ -17,6 +17,7 @@ import {
   executeRollback,
   dispatchSaanAction,
   type SaanActionResult,
+  globalAssociativeNetwork,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -552,6 +553,39 @@ export async function POST(req: NextRequest) {
     if (body.type === "clear_memory_eval_history") {
       getMemoryEvalStore().clear();
       return NextResponse.json({ ok: true });
+    }
+
+    // AssociativeMemoryNetwork (Repo #23) Endpoints
+    if (body.type === "get_associative_network") {
+      globalAssociativeNetwork.seedDefaultSaanNetwork();
+      return NextResponse.json({
+        ok: true,
+        notes: globalAssociativeNetwork.getAllNotes(),
+      });
+    }
+
+    if (body.type === "pulse_associative_concept" && body.seed) {
+      globalAssociativeNetwork.seedDefaultSaanNetwork();
+      const cascade = globalAssociativeNetwork.pulseSpreadingActivation(
+        body.seed,
+        body.energy || 1.0,
+        body.maxHops || 3
+      );
+      return NextResponse.json({
+        ok: true,
+        cascade,
+        notes: globalAssociativeNetwork.getAllNotes(),
+      });
+    }
+
+    if (body.type === "add_associative_note" && body.content) {
+      globalAssociativeNetwork.seedDefaultSaanNetwork();
+      const note = globalAssociativeNetwork.addNote(body.content, body.options || {});
+      return NextResponse.json({
+        ok: true,
+        note,
+        notes: globalAssociativeNetwork.getAllNotes(),
+      });
     }
 
     const rawUserMessage = body.message;

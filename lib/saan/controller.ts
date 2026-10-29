@@ -167,6 +167,7 @@ import {
 // Singleton memory queue for rapid conversational turns
 export const globalBufferedMemoryQueue = new BufferedMemoryQueue({ bufferSize: 64, similarityThreshold: 0.95 });
 export const globalAssociativeNetwork = new AssociativeMemoryNetwork();
+globalAssociativeNetwork.seedDefaultSaanNetwork();
 export const globalMemoryJudge = new MemoryEvalJudge();
 export const globalActionStream = new ObservableActionStream();
 export const globalGateManager = new InteractiveGateManager();

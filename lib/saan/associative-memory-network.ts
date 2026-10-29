@@ -28,6 +28,25 @@ export interface MemoryNote {
   category: string;
   tags: string[];
   metadata?: Record<string, unknown>;
+  activation?: number;      // Current activation energy [0.0, 1.0]
+  baseActivation?: number;  // Resting baseline energy [0.0, 1.0]
+}
+
+export interface SpreadingCascadeStep {
+  hop: number;
+  activatedNoteId: string;
+  content: string;
+  sourceNoteId: string;
+  propagatedEnergy: number;
+  newActivation: number;
+}
+
+export interface SpreadingCascadeResult {
+  seedId: string;
+  seedContent: string;
+  steps: SpreadingCascadeStep[];
+  activeNotesSummary: { id: string; content: string; activation: number }[];
+  durationMs: number;
 }
 
 export interface HybridScoreResult {
@@ -120,6 +139,8 @@ export class AssociativeMemoryNetwork {
       category: options?.category || "general",
       tags: options?.tags || analysis.tags,
       metadata: options?.metadata || {},
+      activation: options?.activation ?? 0.2,
+      baseActivation: options?.baseActivation ?? 0.1,
     };
 
     this.notes.set(id, note);
@@ -330,5 +351,192 @@ export class AssociativeMemoryNetwork {
   public clear(): void {
     this.notes.clear();
     this.taskLinks.clear();
+  }
+
+  /**
+   * Stimulate a concept or note with an impulse and propagate spreading activation.
+   * Based on Collins & Loftus spreading activation model with attenuation and pruning.
+   */
+  public pulseSpreadingActivation(
+    seedQueryOrId: string,
+    impulseEnergy = 1.0,
+    maxHops = 3
+  ): SpreadingCascadeResult {
+    const startTime = performance.now();
+    let seed = this.notes.get(seedQueryOrId);
+
+    if (!seed) {
+      const related = this.findRelatedMemories(seedQueryOrId, 1);
+      if (related.length > 0) {
+        seed = related[0].note;
+      }
+    }
+
+    if (!seed) {
+      return {
+        seedId: seedQueryOrId,
+        seedContent: seedQueryOrId,
+        steps: [],
+        activeNotesSummary: [],
+        durationMs: 0,
+      };
+    }
+
+    seed.activation = Math.min(1.0, (seed.activation || seed.baseActivation || 0.2) + impulseEnergy);
+    seed.last_accessed = new Date().toISOString();
+
+    const steps: SpreadingCascadeStep[] = [];
+    let currentWave: { noteId: string; incomingEnergy: number }[] = [
+      { noteId: seed.id, incomingEnergy: impulseEnergy },
+    ];
+    const visited = new Set<string>([seed.id]);
+    const attenuationFactor = 0.65;
+    const threshold = 0.15;
+
+    for (let hop = 1; hop <= maxHops; hop++) {
+      const nextWave: { noteId: string; incomingEnergy: number }[] = [];
+
+      for (const curr of currentWave) {
+        const sourceNote = this.notes.get(curr.noteId);
+        if (!sourceNote) continue;
+
+        for (const linkedId of sourceNote.links) {
+          const targetNote = this.notes.get(linkedId);
+          if (!targetNote) continue;
+
+          const propagatedEnergy = curr.incomingEnergy * attenuationFactor;
+
+          if (propagatedEnergy >= threshold) {
+            targetNote.activation = Math.min(
+              1.0,
+              (targetNote.activation || targetNote.baseActivation || 0.1) + propagatedEnergy
+            );
+            targetNote.last_accessed = new Date().toISOString();
+
+            steps.push({
+              hop,
+              activatedNoteId: targetNote.id,
+              content: targetNote.content,
+              sourceNoteId: curr.noteId,
+              propagatedEnergy: Number(propagatedEnergy.toFixed(3)),
+              newActivation: Number(targetNote.activation.toFixed(3)),
+            });
+
+            if (!visited.has(targetNote.id)) {
+              visited.add(targetNote.id);
+              nextWave.push({ noteId: targetNote.id, incomingEnergy: propagatedEnergy });
+            }
+          }
+        }
+      }
+
+      if (nextWave.length === 0) break;
+      currentWave = nextWave;
+    }
+
+    // Hebbian reinforcement across co-activated notes
+    const activeIds = Array.from(visited);
+    for (let i = 0; i < activeIds.length; i++) {
+      for (let j = i + 1; j < activeIds.length; j++) {
+        this.applyHebbianReinforcement(activeIds[i], activeIds[j], 0.05);
+      }
+    }
+
+    const durationMs = Number((performance.now() - startTime).toFixed(2));
+    const activeNotesSummary = Array.from(this.notes.values())
+      .filter((n) => (n.activation || 0) >= threshold)
+      .sort((a, b) => (b.activation || 0) - (a.activation || 0))
+      .map((n) => ({
+        id: n.id,
+        content: n.content,
+        activation: Number((n.activation || 0).toFixed(3)),
+      }));
+
+    return {
+      seedId: seed.id,
+      seedContent: seed.content,
+      steps,
+      activeNotesSummary,
+      durationMs,
+    };
+  }
+
+  /**
+   * Strengthens or establishes bidirectional associative links between co-active notes.
+   */
+  public applyHebbianReinforcement(noteAId: string, noteBId: string, rate = 0.08): void {
+    const noteA = this.notes.get(noteAId);
+    const noteB = this.notes.get(noteBId);
+    if (!noteA || !noteB || noteAId === noteBId) return;
+
+    if (!noteA.links.includes(noteBId)) {
+      noteA.links.push(noteBId);
+    }
+    if (!noteB.links.includes(noteAId)) {
+      noteB.links.push(noteAId);
+    }
+  }
+
+  /**
+   * Seeds default Saan companion concept web if the network is empty.
+   */
+  public seedDefaultSaanNetwork(): void {
+    if (this.notes.size > 0) return;
+
+    const nChai = this.addNote("Subah ki adrak elaichi chai aur peaceful balcony view.", {
+      id: "note-chai",
+      category: "preference",
+      tags: ["chai", "morning", "comfort"],
+      activation: 0.4,
+      baseActivation: 0.2,
+    });
+
+    const nMorning = this.addNote("Morning routine: light stretching, deep focus session and journaling.", {
+      id: "note-morning",
+      category: "activity",
+      tags: ["routine", "focus", "morning"],
+      activation: 0.35,
+      baseActivation: 0.2,
+    });
+
+    const nCycling = this.addNote("Cycling around Jal Mahal lake during pleasant sunrise breeze.", {
+      id: "note-cycling",
+      category: "activity",
+      tags: ["cycling", "jaipur", "fitness"],
+      activation: 0.25,
+      baseActivation: 0.15,
+    });
+
+    const nJaipur = this.addNote("Jaipur pink city heritage, Jal Mahal, and tranquil evening walks.", {
+      id: "note-jaipur",
+      category: "place",
+      tags: ["jaipur", "travel", "culture"],
+      activation: 0.3,
+      baseActivation: 0.2,
+    });
+
+    const nCoding = this.addNote("Deep architectural engineering and autonomous agent systems on K7.", {
+      id: "note-coding",
+      category: "activity",
+      tags: ["coding", "k7", "autonomous"],
+      activation: 0.4,
+      baseActivation: 0.25,
+    });
+
+    const nK7 = this.addNote("K7 Sovereign OS Cockpit: local zero-cloud privacy and high fidelity.", {
+      id: "note-k7",
+      category: "entity",
+      tags: ["k7", "sovereign", "privacy"],
+      activation: 0.45,
+      baseActivation: 0.3,
+    });
+
+    // Form bidirectional links
+    nChai.links.push(nMorning.id);
+    nMorning.links.push(nChai.id, nCycling.id);
+    nCycling.links.push(nMorning.id, nJaipur.id);
+    nJaipur.links.push(nCycling.id);
+    nCoding.links.push(nK7.id);
+    nK7.links.push(nCoding.id, nMorning.id);
   }
 }

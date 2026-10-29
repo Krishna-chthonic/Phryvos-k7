@@ -42,6 +42,7 @@ import {
   Activity,
   Wrench,
   Scale,
+  Workflow,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -56,6 +57,7 @@ import { SaanActionTimelineModal } from "./SaanActionTimelineModal";
 import { SaanDirtyJsonDebugModal } from "./SaanDirtyJsonDebugModal";
 import { SaanProactiveTriggerModal } from "./SaanProactiveTriggerModal";
 import { SaanMemoryEvalJudgeModal } from "./SaanMemoryEvalJudgeModal";
+import { SaanAssociativeNetworkModal } from "./SaanAssociativeNetworkModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -192,6 +194,9 @@ export function SaanStageChatView({
 
   // MemoryEvalJudge Ground Truth Memory Evaluator State
   const [isMemoryEvalJudgeOpen, setIsMemoryEvalJudgeOpen] = React.useState(false);
+
+  // AssociativeMemory Spreading Activation Network State
+  const [isAssociativeNetworkOpen, setIsAssociativeNetworkOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1339,6 +1344,17 @@ export function SaanStageChatView({
                 <Scale className="w-3.5 h-3.5 text-cyan-400" />
                 <span>EvalJudge</span>
               </button>
+
+              {/* AssociativeMemory: Spreading Activation Graph Network Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsAssociativeNetworkOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
+                title="Inspect Spreading Activation Cognitive Graph & Concept Clusters (AssociativeMemory Engine)"
+              >
+                <Workflow className="w-3.5 h-3.5 text-violet-400" />
+                <span>AssocWeb</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2150,6 +2166,12 @@ export function SaanStageChatView({
       <SaanMemoryEvalJudgeModal
         isOpen={isMemoryEvalJudgeOpen}
         onClose={() => setIsMemoryEvalJudgeOpen(false)}
+      />
+
+      {/* AssociativeMemory Spreading Activation Network Modal */}
+      <SaanAssociativeNetworkModal
+        isOpen={isAssociativeNetworkOpen}
+        onClose={() => setIsAssociativeNetworkOpen(false)}
       />
     </div>
   );

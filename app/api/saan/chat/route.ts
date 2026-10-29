@@ -33,6 +33,7 @@ import {
   globalMcpBridge,
   globalAudioPipeline,
   globalVoiceFSM,
+  globalWhisperNormalizer,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1016,6 +1017,36 @@ export async function POST(req: NextRequest) {
         ok: true,
         raw: body.text,
         normalized,
+      });
+    }
+
+    // Whisper Multilingual ASR Normalizer & Decoding Fallback (Repo #38) Endpoints
+    if (body.type === "get_whisper_config") {
+      const config = globalWhisperNormalizer.getDecodingConfig(body.lang || "hinglish", body.prompt);
+      return NextResponse.json({
+        ok: true,
+        config,
+      });
+    }
+
+    if (body.type === "normalize_whisper_transcript" && body.transcript !== undefined) {
+      const normalized = globalWhisperNormalizer.normalize(body.transcript);
+      return NextResponse.json({
+        ok: true,
+        raw: body.transcript,
+        normalized,
+      });
+    }
+
+    if (body.type === "evaluate_whisper_temperature_fallback") {
+      const result = globalWhisperNormalizer.evaluateTemperatureFallback(
+        body.currentTemperature ?? 0.0,
+        body.repetitionDetected ?? false,
+        body.avgLogprob
+      );
+      return NextResponse.json({
+        ok: true,
+        ...result,
       });
     }
 

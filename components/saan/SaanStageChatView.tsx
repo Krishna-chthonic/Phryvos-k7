@@ -79,6 +79,7 @@ import { SaanStealthHeadersModal } from "./SaanStealthHeadersModal";
 import { SaanMcpExplorerModal } from "./SaanMcpExplorerModal";
 import { SaanStreamingFrameModal } from "./SaanStreamingFrameModal";
 import { SaanVoiceFsmModal } from "./SaanVoiceFsmModal";
+import { SaanWhisperAsrModal } from "./SaanWhisperAsrModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -263,6 +264,9 @@ export function SaanStageChatView({
   // LiveKit Agents Voice Turn-Taking FSM State
   const [isVoiceFsmModalOpen, setIsVoiceFsmModalOpen] = React.useState(false);
   const [voiceFsmState, setVoiceFsmState] = React.useState<string>("IDLE");
+
+  // Whisper Multilingual ASR Normalizer State
+  const [isWhisperModalOpen, setIsWhisperModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1592,6 +1596,17 @@ export function SaanStageChatView({
                   {voiceFsmState}
                 </span>
               </button>
+
+              {/* Whisper: Multilingual ASR Normalizer & Decoding Fallback Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsWhisperModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
+                title="Inspect OpenAI Whisper Multilingual ASR Normalizer & Temperature Cascade (Repo #38)"
+              >
+                <Mic className="w-3.5 h-3.5 text-teal-400" />
+                <span>Whisper</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2493,6 +2508,12 @@ export function SaanStageChatView({
         isOpen={isVoiceFsmModalOpen}
         onClose={() => setIsVoiceFsmModalOpen(false)}
         onStateChange={(st) => setVoiceFsmState(st)}
+      />
+
+      {/* Whisper Multilingual ASR Normalizer Modal */}
+      <SaanWhisperAsrModal
+        isOpen={isWhisperModalOpen}
+        onClose={() => setIsWhisperModalOpen(false)}
       />
     </div>
   );

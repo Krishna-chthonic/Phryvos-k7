@@ -36,6 +36,7 @@ import {
   Clock,
   BookOpen,
   UserCheck,
+  Inbox,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -43,6 +44,7 @@ import { SaanHindsightBudgetModal } from "./SaanHindsightBudgetModal";
 import { SaanTimeTravelScrubberModal } from "./SaanTimeTravelScrubberModal";
 import { SaanIncrementalSummaryModal } from "./SaanIncrementalSummaryModal";
 import { SaanProfileExtractorModal } from "./SaanProfileExtractorModal";
+import { SaanBufferedQueueModal } from "./SaanBufferedQueueModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -157,6 +159,10 @@ export function SaanStageChatView({
 
   // Memobase User Profile State
   const [isProfileOpen, setIsProfileOpen] = React.useState(false);
+
+  // SuperAGI Buffered Memory Queue State
+  const [isBufferedQueueOpen, setIsBufferedQueueOpen] = React.useState(false);
+  const [bufferedQueueCount, setBufferedQueueCount] = React.useState(0);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1227,6 +1233,17 @@ export function SaanStageChatView({
                 <UserCheck className="w-3.5 h-3.5 text-teal-400" />
                 <span>Profile</span>
               </button>
+
+              {/* SuperAGI: Multi-Tier Memory Queue Buffer Inspector Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsBufferedQueueOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Inspect Multi-Tier Write Buffer Queue (SuperAGI & TeleMem Engine)"
+              >
+                <Inbox className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Buffer{bufferedQueueCount > 0 ? `: ${bufferedQueueCount}` : ""}</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1971,6 +1988,24 @@ export function SaanStageChatView({
       <SaanProfileExtractorModal
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
+      />
+
+      {/* SuperAGI Multi-Tier Write Buffer Inspector Modal */}
+      <SaanBufferedQueueModal
+        isOpen={isBufferedQueueOpen}
+        onClose={() => setIsBufferedQueueOpen(false)}
+        onQueueUpdated={() => {
+          fetch("/api/saan/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "get_buffered_queue_status" }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.ok && d.metrics) setBufferedQueueCount(d.metrics.totalPending);
+            })
+            .catch(() => {});
+        }}
       />
     </div>
   );

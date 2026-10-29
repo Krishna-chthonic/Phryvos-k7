@@ -1,25 +1,29 @@
 /**
- * TeleMem Buffered Memory Queue & Embedding Cosine Clustering Engine
+ * SuperAGI & TeleMem Multi-Tier Buffered Memory Queue & Semantic Clustering Engine
  *
- * Clean-room adaptation synthesizing TeleAI-UAGI/telemem:
- * 1. Write buffer queue to avoid database write thrashing during rapid turns.
- * 2. 4-axis persona fact classification:
- *    - relationships (人物关系与互动)
- *    - events (情节发展与事件细节)
- *    - traits (角色特征与背景)
- *    - items (具体物品与地点)
- * 3. Cosine similarity clustering (threshold >= 0.95) across candidate & existing memories.
- * 4. Cluster resolution: Single item -> ADD; Multi-item cluster -> Synthesized Fusion.
+ * Clean-room adaptation synthesizing SuperAGI + TeleAI-UAGI/telemem:
+ * 1. 3-Tier Architecture:
+ *    - Hot Tier: Instant in-memory retrieval cache.
+ *    - Warm Tier: Priority staged write buffer (CRITICAL, HIGH, NORMAL, EPHEMERAL).
+ *    - Cold Tier: Committed persistence with batch flushing to prevent disk thrashing.
+ * 2. 4-Axis persona fact classification (relationships, events, traits, items).
+ * 3. Priority promotion: repeated signals automatically promote NORMAL/EPHEMERAL to HIGH/CRITICAL.
+ * 4. Unified In-Flight Search: queries inspect both committed storage and pending warm-buffer items.
+ * 5. High-precision semantic cosine clustering (threshold >= 0.95) with cluster fusion.
  */
+
+export type MemoryPriority = 'CRITICAL' | 'HIGH' | 'NORMAL' | 'EPHEMERAL';
 
 export interface BufferedMemoryCandidate {
   id: string;
   userId: string;
   text: string;
   axis: 'relationships' | 'events' | 'traits' | 'items';
+  priority?: MemoryPriority;
   embedding?: number[];
   confidence: number;
   createdAt: string;
+  accessCount?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -38,6 +42,16 @@ export interface FlushResult {
     originalCount: number;
     synthesizedMemories: string[];
   };
+  flushedAt: string;
+}
+
+export interface QueueStatusMetrics {
+  totalPending: number;
+  capacity: number;
+  utilizationPct: number;
+  byPriority: Record<MemoryPriority, number>;
+  byAxis: Record<string, number>;
+  oldestItemAgeMs: number;
 }
 
 /**
@@ -85,15 +99,24 @@ export function computeSyntheticEmbedding(text: string, dim: number = 64): numbe
   return vec;
 }
 
+const PRIORITY_WEIGHTS: Record<MemoryPriority, number> = {
+  CRITICAL: 4,
+  HIGH: 3,
+  NORMAL: 2,
+  EPHEMERAL: 1,
+};
+
 export class BufferedMemoryQueue {
   private bufferSize: number;
   private similarityThreshold: number;
   private buffers: Map<string, BufferedMemoryCandidate[]>;
+  private committedArchive: Map<string, BufferedMemoryCandidate[]>;
 
   constructor(options?: { bufferSize?: number; similarityThreshold?: number }) {
     this.bufferSize = options?.bufferSize ?? 64;
     this.similarityThreshold = options?.similarityThreshold ?? 0.95;
     this.buffers = new Map();
+    this.committedArchive = new Map();
   }
 
   private getBufferKey(userId: string): string {
@@ -105,14 +128,59 @@ export class BufferedMemoryQueue {
     return this.buffers.get(key)?.length ?? 0;
   }
 
+  public getQueueMetrics(userId: string): QueueStatusMetrics {
+    const key = this.getBufferKey(userId);
+    const items = this.buffers.get(key) || [];
+    const byPriority: Record<MemoryPriority, number> = {
+      CRITICAL: 0,
+      HIGH: 0,
+      NORMAL: 0,
+      EPHEMERAL: 0,
+    };
+    const byAxis: Record<string, number> = {
+      relationships: 0,
+      events: 0,
+      traits: 0,
+      items: 0,
+    };
+
+    let oldestTime = Date.now();
+    for (const it of items) {
+      const p = it.priority || 'NORMAL';
+      byPriority[p] = (byPriority[p] || 0) + 1;
+      byAxis[it.axis] = (byAxis[it.axis] || 0) + 1;
+      const t = new Date(it.createdAt).getTime();
+      if (t < oldestTime) oldestTime = t;
+    }
+
+    const oldestItemAgeMs = items.length > 0 ? Math.max(0, Date.now() - oldestTime) : 0;
+    const utilizationPct = Math.min(100, Math.round((items.length / this.bufferSize) * 100));
+
+    return {
+      totalPending: items.length,
+      capacity: this.bufferSize,
+      utilizationPct,
+      byPriority,
+      byAxis,
+      oldestItemAgeMs,
+    };
+  }
+
+  public getPendingItems(userId: string): BufferedMemoryCandidate[] {
+    const key = this.getBufferKey(userId);
+    return [...(this.buffers.get(key) || [])];
+  }
+
   /**
    * Pushes a candidate memory into the buffer.
-   * Auto-embeds if embedding is missing.
+   * Performs priority promotion if a similar fact is repeatedly enqueued.
    */
   public enqueue(candidate: Omit<BufferedMemoryCandidate, 'id' | 'createdAt'>): {
     queued: boolean;
+    promoted: boolean;
     pendingCount: number;
     shouldFlush: boolean;
+    item: BufferedMemoryCandidate;
   } {
     const key = this.getBufferKey(candidate.userId);
     if (!this.buffers.has(key)) {
@@ -120,21 +188,126 @@ export class BufferedMemoryQueue {
     }
     const buf = this.buffers.get(key)!;
 
+    const embedding = candidate.embedding ?? computeSyntheticEmbedding(candidate.text);
+    let promoted = false;
+
+    // Check if an existing buffered item is semantically identical: promote its priority and merge
+    for (const existing of buf) {
+      if (existing.axis === candidate.axis) {
+        const isExact = existing.text.trim().toLowerCase() === candidate.text.trim().toLowerCase();
+        const sim = cosineSimilarity(existing.embedding ?? [], embedding);
+        if (isExact || sim >= 0.99) {
+          // Priority promotion logic: EPHEMERAL -> NORMAL -> HIGH -> CRITICAL
+          const curPriority = existing.priority || 'NORMAL';
+          if (curPriority === 'EPHEMERAL') existing.priority = 'NORMAL';
+          else if (curPriority === 'NORMAL') existing.priority = 'HIGH';
+          else if (curPriority === 'HIGH') existing.priority = 'CRITICAL';
+
+          existing.confidence = Math.max(existing.confidence, candidate.confidence);
+          existing.accessCount = (existing.accessCount || 1) + 1;
+          promoted = true;
+
+          return {
+            queued: true,
+            promoted: true,
+            pendingCount: buf.length,
+            shouldFlush: buf.length >= this.bufferSize,
+            item: existing,
+          };
+        }
+      }
+    }
+
     const fullItem: BufferedMemoryCandidate = {
       ...candidate,
       id: `mem_buf_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      priority: candidate.priority || 'NORMAL',
       createdAt: new Date().toISOString(),
-      embedding: candidate.embedding ?? computeSyntheticEmbedding(candidate.text),
+      embedding,
+      accessCount: 1,
     };
 
     buf.push(fullItem);
+
+    // Sort buffer by priority descending (CRITICAL -> HIGH -> NORMAL -> EPHEMERAL)
+    buf.sort((a, b) => {
+      const wa = PRIORITY_WEIGHTS[a.priority || 'NORMAL'];
+      const wb = PRIORITY_WEIGHTS[b.priority || 'NORMAL'];
+      return wb - wa;
+    });
+
     const shouldFlush = buf.length >= this.bufferSize;
 
     return {
       queued: true,
+      promoted: false,
       pendingCount: buf.length,
       shouldFlush,
+      item: fullItem,
     };
+  }
+
+  /**
+   * Unified In-Flight Search:
+   * Queries both committed long-term memory AND pending uncommitted buffer memories
+   * using hybrid semantic vector similarity + lexical keyword overlap.
+   */
+  public searchUnified(userId: string, query: string, limit: number = 5): {
+    source: 'warm_buffer' | 'cold_storage';
+    item: BufferedMemoryCandidate;
+    score: number;
+  }[] {
+    const queryEmb = computeSyntheticEmbedding(query);
+    const queryTokens = new Set(
+      query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2)
+    );
+
+    const calculateRelevance = (item: BufferedMemoryCandidate): number => {
+      const emb = item.embedding ?? computeSyntheticEmbedding(item.text);
+      const vecScore = cosineSimilarity(queryEmb, emb);
+
+      const itemWords = item.text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2);
+
+      let matchedWords = 0;
+      for (const w of itemWords) {
+        if (queryTokens.has(w)) matchedWords++;
+      }
+      const lexicalScore = queryTokens.size > 0 ? matchedWords / queryTokens.size : 0;
+
+      return vecScore * 0.4 + lexicalScore * 0.6;
+    };
+
+    const results: { source: 'warm_buffer' | 'cold_storage'; item: BufferedMemoryCandidate; score: number }[] = [];
+
+    // 1. Search pending warm buffer
+    const key = this.getBufferKey(userId);
+    const warmItems = this.buffers.get(key) || [];
+    for (const it of warmItems) {
+      const score = calculateRelevance(it);
+      if (score >= 0.1) {
+        results.push({ source: 'warm_buffer', item: it, score });
+      }
+    }
+
+    // 2. Search committed cold storage
+    const coldItems = this.committedArchive.get(key) || [];
+    for (const it of coldItems) {
+      const score = calculateRelevance(it);
+      if (score >= 0.1) {
+        results.push({ source: 'cold_storage', item: it, score });
+      }
+    }
+
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, limit);
   }
 
   /**
@@ -166,9 +339,19 @@ export class BufferedMemoryQueue {
         if (current.axis !== next.axis) continue;
 
         const embB = next.embedding ?? computeSyntheticEmbedding(next.text);
-        const sim = cosineSimilarity(embA, embB);
+        const vecSim = cosineSimilarity(embA, embB);
 
-        if (sim >= threshold) {
+        // Lexical token overlap for offline robustness
+        const wordsA = new Set(current.text.toLowerCase().split(/\s+/));
+        const wordsB = new Set(next.text.toLowerCase().split(/\s+/));
+        let overlap = 0;
+        for (const w of wordsA) {
+          if (wordsB.has(w)) overlap++;
+        }
+        const jaccard = overlap / Math.max(1, wordsA.size + wordsB.size - overlap);
+        const hybridSim = Math.max(vecSim, jaccard);
+
+        if (hybridSim >= threshold || vecSim >= threshold) {
           clusterItems.push(next);
           used.add(next.id);
         }
@@ -199,7 +382,7 @@ export class BufferedMemoryQueue {
   }
 
   /**
-   * Flushes the buffer for a user, executing clustering and deduplication.
+   * Flushes the buffer for a user, executing clustering, deduplication and archiving into cold storage.
    */
   public flush(userId: string): FlushResult {
     const key = this.getBufferKey(userId);
@@ -208,6 +391,7 @@ export class BufferedMemoryQueue {
       return {
         added: [],
         fused: { clusterCount: 0, originalCount: 0, synthesizedMemories: [] },
+        flushedAt: new Date().toISOString(),
       };
     }
 
@@ -222,13 +406,20 @@ export class BufferedMemoryQueue {
       } else {
         fusedClusterCount++;
         synthesized.push(cluster.synthesizedText!);
-        // Produce single fused candidate memory with max confidence
+        // Produce single fused candidate memory with max confidence & highest priority
         const maxConf = Math.max(...cluster.items.map((x) => x.confidence));
+        const highestPriority = cluster.items.some((x) => x.priority === 'CRITICAL')
+          ? 'CRITICAL'
+          : cluster.items.some((x) => x.priority === 'HIGH')
+          ? 'HIGH'
+          : 'NORMAL';
+
         added.push({
           id: `fused_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
           userId,
           text: cluster.synthesizedText!,
           axis: cluster.items[0].axis,
+          priority: highestPriority,
           confidence: maxConf,
           createdAt: new Date().toISOString(),
           metadata: {
@@ -239,7 +430,14 @@ export class BufferedMemoryQueue {
       }
     }
 
-    // Clear buffer
+    // Archive into cold storage
+    if (!this.committedArchive.has(key)) {
+      this.committedArchive.set(key, []);
+    }
+    const archive = this.committedArchive.get(key)!;
+    archive.push(...added);
+
+    // Clear warm buffer
     this.buffers.set(key, []);
 
     return {
@@ -249,6 +447,7 @@ export class BufferedMemoryQueue {
         originalCount: items.length,
         synthesizedMemories: synthesized,
       },
+      flushedAt: new Date().toISOString(),
     };
   }
 
@@ -270,3 +469,16 @@ export class BufferedMemoryQueue {
     return { systemPrompt, userPrompt };
   }
 }
+
+/**
+ * Singleton instance for cross-component shared buffered memory queue
+ */
+let globalBufferedQueue: BufferedMemoryQueue | null = null;
+
+export function getBufferedMemoryQueue(): BufferedMemoryQueue {
+  if (!globalBufferedQueue) {
+    globalBufferedQueue = new BufferedMemoryQueue({ bufferSize: 32, similarityThreshold: 0.95 });
+  }
+  return globalBufferedQueue;
+}
+

@@ -67,6 +67,7 @@ import {
 import { reconstructPointInTimeState } from "@/lib/saan/memory-benchmark-bitemporal";
 import { getGlobalIncrementalSummaryManager } from "@/lib/saan/incremental-summary";
 import { getGlobalMemobaseProfileStore, MemobaseProfileManager } from "@/lib/saan/profile-extractor";
+import { getBufferedMemoryQueue, type MemoryPriority } from "@/lib/saan/buffered-memory-queue";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -264,6 +265,30 @@ export async function POST(req: NextRequest) {
         decision: res.decision,
         allAttributes: store.getAll(),
       });
+    }
+
+    // SuperAGI Buffered Memory Queue Endpoints
+    if (body.type === "get_buffered_queue_status") {
+      const q = getBufferedMemoryQueue();
+      const metrics = q.getQueueMetrics("user");
+      const items = q.getPendingItems("user");
+      return NextResponse.json({ ok: true, metrics, items });
+    }
+    if (body.type === "enqueue_buffered_memory" && body.candidate) {
+      const q = getBufferedMemoryQueue();
+      const result = q.enqueue({
+        userId: "user",
+        text: body.candidate.text,
+        axis: body.candidate.axis || "traits",
+        priority: (body.candidate.priority as MemoryPriority) || "NORMAL",
+        confidence: body.candidate.confidence ?? 0.85,
+      });
+      return NextResponse.json({ ok: true, result, metrics: q.getQueueMetrics("user") });
+    }
+    if (body.type === "flush_buffered_memory") {
+      const q = getBufferedMemoryQueue();
+      const flushResult = q.flush("user");
+      return NextResponse.json({ ok: true, flushResult, metrics: q.getQueueMetrics("user") });
     }
 
     const rawUserMessage = body.message;

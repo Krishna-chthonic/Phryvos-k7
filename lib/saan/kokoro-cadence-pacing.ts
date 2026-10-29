@@ -94,8 +94,14 @@ export class KokoroTextSplitter {
         }
       }
 
-      // Check for sentence boundary when outside any nested quote or bracket
-      if (stack.length === 0 && SENTENCE_TERMINATORS.has(c)) {
+      // Check for sentence boundary when outside any nested quote or bracket,
+      // or when the terminator is immediately followed by the closing quote/bracket.
+      const isClosingQuoteNext =
+        stack.length === 1 &&
+        i + 1 < len &&
+        (buffer[i + 1] === stack[0] || MATCHING_PAIRS.get(buffer[i + 1]) === stack[0]);
+
+      if ((stack.length === 0 || isClosingQuoteNext) && SENTENCE_TERMINATORS.has(c)) {
         const currentSegment = buffer.slice(sentenceStart, i);
 
         // Skip numbered list markers (e.g. "1." or "\n2.")
@@ -143,6 +149,10 @@ export class KokoroTextSplitter {
         const sentence = buffer.substring(sentenceStart, boundaryEnd + 1).trim();
         if (sentence && sentence !== '...' && sentence !== '…') {
           sentences.push(sentence);
+        }
+
+        if (isClosingQuoteNext) {
+          stack.pop();
         }
 
         i = boundaryEnd + 1;
@@ -231,3 +241,6 @@ export class CircadianCadenceEngine {
     };
   }
 }
+
+export const kokoroCadenceEngine = new CircadianCadenceEngine();
+

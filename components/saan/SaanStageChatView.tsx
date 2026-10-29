@@ -51,6 +51,7 @@ import {
   Target,
   EyeOff,
   Cpu,
+  Music,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -80,6 +81,7 @@ import { SaanMcpExplorerModal } from "./SaanMcpExplorerModal";
 import { SaanStreamingFrameModal } from "./SaanStreamingFrameModal";
 import { SaanVoiceFsmModal } from "./SaanVoiceFsmModal";
 import { SaanWhisperAsrModal } from "./SaanWhisperAsrModal";
+import { SaanKokoroCadenceModal } from "./SaanKokoroCadenceModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -267,6 +269,9 @@ export function SaanStageChatView({
 
   // Whisper Multilingual ASR Normalizer State
   const [isWhisperModalOpen, setIsWhisperModalOpen] = React.useState(false);
+
+  // Kokoro Circadian Cadence & Pacing State
+  const [isKokoroModalOpen, setIsKokoroModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1607,6 +1612,17 @@ export function SaanStageChatView({
                 <Mic className="w-3.5 h-3.5 text-teal-400" />
                 <span>Whisper</span>
               </button>
+
+              {/* Kokoro: Circadian Prosody & AST Text Splitter Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsKokoroModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-pink-950/40 text-pink-300 border border-zinc-800 hover:border-pink-500/40 transition cursor-pointer"
+                title="Inspect Kokoro Circadian Prosody & AST Text Splitter (Repo #39)"
+              >
+                <Music className="w-3.5 h-3.5 text-pink-400" />
+                <span>Kokoro</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2514,6 +2530,12 @@ export function SaanStageChatView({
       <SaanWhisperAsrModal
         isOpen={isWhisperModalOpen}
         onClose={() => setIsWhisperModalOpen(false)}
+      />
+
+      {/* Kokoro Circadian Cadence & Pacing Modal */}
+      <SaanKokoroCadenceModal
+        isOpen={isKokoroModalOpen}
+        onClose={() => setIsKokoroModalOpen(false)}
       />
     </div>
   );

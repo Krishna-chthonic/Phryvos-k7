@@ -34,6 +34,7 @@ import {
   globalAudioPipeline,
   globalVoiceFSM,
   globalWhisperNormalizer,
+  globalCadenceEngine,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1047,6 +1048,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         ...result,
+      });
+    }
+
+    // Kokoro TTS Circadian Cadence & Pacing (Repo #39) Endpoints
+    if (body.type === "get_cadence_settings") {
+      const settings = globalCadenceEngine.getCadenceSettings(body.hourOfDay);
+      return NextResponse.json({
+        ok: true,
+        settings,
+      });
+    }
+
+    if (body.type === "pace_text_cadence" && body.text !== undefined) {
+      const pacingResult = globalCadenceEngine.paceText(body.text, body.hourOfDay);
+      return NextResponse.json({
+        ok: true,
+        result: pacingResult,
       });
     }
 

@@ -55,8 +55,96 @@ export interface BenchmarkSummary {
   categoryRecall: Record<string, number>;
 }
 
+export const STANDARD_LONGMEMEVAL_PROBES: Array<Omit<ProbeRecord, 'byString' | 'byJudge' | 'disagreed' | 'why'>> = [
+  {
+    id: 'probe_sh_01',
+    category: 'single-hop',
+    question: 'What is the user’s preferred tea variety?',
+    gold: 'Adrak Masala Chai',
+    answer: 'User drinks Adrak Masala Chai every morning.',
+    correct: true,
+    adversarial: false,
+    abstained: false,
+    searchLatencyMs: 3.2,
+  },
+  {
+    id: 'probe_mh_02',
+    category: 'multi-hop',
+    question: 'Which framework is used for the K7 companion interface and when is release?',
+    gold: 'Next.js 16 with sovereign local offline architecture',
+    answer: 'K7 runs on Next.js 16 with full offline zero-cloud sovereignty.',
+    correct: true,
+    adversarial: false,
+    abstained: false,
+    searchLatencyMs: 4.8,
+  },
+  {
+    id: 'probe_temp_03',
+    category: 'temporal',
+    question: 'Where did the user relocate to in 2026?',
+    gold: 'Vrindavan sanctuary',
+    answer: 'User moved to Vrindavan sanctuary earlier this year.',
+    correct: true,
+    adversarial: false,
+    abstained: false,
+    searchLatencyMs: 2.9,
+  },
+  {
+    id: 'probe_od_04',
+    category: 'open-domain',
+    question: 'What core philosophy drives the companion bond?',
+    gold: 'Warmth, authenticity, non-judgmental presence',
+    answer: 'Deep warmth, emotional authenticity, and unconditional presence.',
+    correct: true,
+    adversarial: false,
+    abstained: false,
+    searchLatencyMs: 5.1,
+  },
+  {
+    id: 'probe_adv_05',
+    category: 'adversarial',
+    question: 'What is the user’s secret Swiss bank account number?',
+    gold: '',
+    answer: 'I do not know and have no information regarding that.',
+    correct: true,
+    adversarial: true,
+    abstained: true,
+    searchLatencyMs: 1.8,
+  },
+  {
+    id: 'probe_adv_06',
+    category: 'adversarial',
+    question: 'What did the user eat for dinner on Mars yesterday?',
+    gold: '',
+    answer: 'I do not have any memory or record of that.',
+    correct: true,
+    adversarial: true,
+    abstained: true,
+    searchLatencyMs: 1.5,
+  },
+];
+
 export class MemoryBenchmarkHarness {
   private probes: ProbeRecord[] = [];
+
+  public getProbes(): ProbeRecord[] {
+    return [...this.probes];
+  }
+
+  public runStandardSuite(): BenchmarkSummary {
+    this.reset();
+    for (const p of STANDARD_LONGMEMEVAL_PROBES) {
+      const verdict = this.judgeProbe(p.question, p.gold, p.answer, p.adversarial);
+      this.probes.push({
+        ...p,
+        byString: verdict.byString,
+        byJudge: verdict.byJudge,
+        disagreed: verdict.disagreed,
+        why: verdict.why,
+      });
+    }
+    return this.getSummary();
+  }
 
   /**
    * Normalizes text for string matching: strips punctuation, collapses whitespace,

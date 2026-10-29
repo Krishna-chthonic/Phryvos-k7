@@ -40,6 +40,7 @@ import {
   globalVaultBackupEngine,
   globalComposerDraftBus,
   globalDocumentCollectorVault,
+  globalMemoryBenchmark,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1237,6 +1238,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         graph,
+      });
+    }
+
+    // LongMemEval & Datapace Memory Benchmark Harness (Repo #47) Endpoints
+    if (body.type === "run_memory_benchmark") {
+      const summary = globalMemoryBenchmark.runStandardSuite();
+      const probes = globalMemoryBenchmark.getProbes();
+      return NextResponse.json({
+        ok: true,
+        summary,
+        probes,
+      });
+    }
+
+    if (body.type === "get_memory_benchmark_summary") {
+      let summary = globalMemoryBenchmark.getSummary();
+      let probes = globalMemoryBenchmark.getProbes();
+      if (summary.totalProbes === 0) {
+        summary = globalMemoryBenchmark.runStandardSuite();
+        probes = globalMemoryBenchmark.getProbes();
+      }
+      return NextResponse.json({
+        ok: true,
+        summary,
+        probes,
       });
     }
 

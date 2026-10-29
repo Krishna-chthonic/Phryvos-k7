@@ -2360,14 +2360,17 @@ export function runMemoryBenchmarkEvaluationAction(probes?: ProbeRecord[]): Saan
       for (const p of probes) {
         globalMemoryBenchmark.addProbe(p);
       }
+    } else {
+      globalMemoryBenchmark.runStandardSuite();
     }
     const summary = globalMemoryBenchmark.getSummary();
+    const evaluatedProbes = globalMemoryBenchmark.getProbes();
     return {
       success: true,
       action: "run_memory_benchmark_evaluation",
       tier: 1,
       message: `Recall: ${summary.recallPercent}%, Refusal: ${summary.refusedAdversarialPercent}%, Latency p50: ${summary.searchLatencyP50Ms}ms (Sub-10ms target: ${summary.sub10msTargetMet})`,
-      data: summary,
+      data: { summary, probes: evaluatedProbes },
     };
   } catch (err: any) {
     return { success: false, action: "run_memory_benchmark_evaluation", tier: 1, message: err.message };

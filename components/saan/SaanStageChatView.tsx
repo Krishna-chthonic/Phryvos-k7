@@ -120,6 +120,8 @@ interface SaanStageChatViewProps {
   huginnInsights?: HuginnInsightItem[];
   onRefreshSoul?: () => void;
   onNavigateTab?: (tab: "stage" | "persona" | "graph" | "soul" | "tools") => void;
+  requestedModal?: string | null;
+  onResetRequestedModal?: () => void;
 }
 
 export function SaanStageChatView({
@@ -133,6 +135,8 @@ export function SaanStageChatView({
   huginnInsights = [],
   onRefreshSoul,
   onNavigateTab,
+  requestedModal,
+  onResetRequestedModal,
 }: SaanStageChatViewProps) {
   const [messages, setMessages] = React.useState<DialogueBubbleMessage[]>([]);
   const [input, setInput] = React.useState("");
@@ -302,6 +306,60 @@ export function SaanStageChatView({
   const [isContradictionModalOpen, setIsContradictionModalOpen] = React.useState(false);
   const [isSelfEditModalOpen, setIsSelfEditModalOpen] = React.useState(false);
   const [isCapstoneModalOpen, setIsCapstoneModalOpen] = React.useState(false);
+
+  // Listen to requestedModal from Sidebar Menu
+  React.useEffect(() => {
+    if (!requestedModal) return;
+    switch (requestedModal) {
+      case "flashbulb": setIsFlashbulbOpen(true); break;
+      case "huginn": setIsHuginnOpen(true); break;
+      case "ledger": setIsLedgerOpen(true); break;
+      case "recap": setIsRecapOpen(true); break;
+      case "variables": setIsVariablesOpen(true); break;
+      case "graphMem": setIsGraphOpen(true); break;
+      case "coreMem": setIsCoreMemOpen(true); break;
+      case "mem0": setIsMem0Open(true); break;
+      case "graphiti": setIsGraphitiOpen(true); break;
+      case "cognify": setIsCognifyOpen(true); break;
+      case "hindsight": setIsHindsightOpen(true); break;
+      case "timeTravel": setIsTimeTravelOpen(true); break;
+      case "summary": setIsSummaryOpen(true); break;
+      case "profile": setIsProfileOpen(true); break;
+      case "bufferedQueue": setIsBufferedQueueOpen(true); break;
+      case "portableMemory": setIsPortableMemoryOpen(true); break;
+      case "scratchpad": setIsScratchpadOpen(true); break;
+      case "actionTimeline": setIsActionTimelineOpen(true); break;
+      case "jsonDebug": setIsJsonDebugOpen(true); break;
+      case "proactiveTrigger": setIsProactiveTriggerOpen(true); break;
+      case "memoryEvalJudge": setIsMemoryEvalJudgeOpen(true); break;
+      case "associativeNetwork": setIsAssociativeNetworkOpen(true); break;
+      case "stateLease": setIsStateLeaseOpen(true); break;
+      case "researchWorkflow": setIsResearchWorkflowOpen(true); break;
+      case "gateModal": setIsGateModalOpen(true); break;
+      case "retryTelemetry": setIsRetryTelemetryOpen(true); break;
+      case "lifecycleHook": setIsLifecycleHookOpen(true); break;
+      case "metasearch": setIsMetasearchOpen(true); break;
+      case "cleanReader": setIsCleanReaderOpen(true); break;
+      case "securityFence": setIsSecurityFenceOpen(true); break;
+      case "accessibilityTree": setIsAccessibilityTreeOpen(true); break;
+      case "stealth": setIsStealthModalOpen(true); break;
+      case "mcp": setIsMcpModalOpen(true); break;
+      case "pipecat": setIsPipecatModalOpen(true); break;
+      case "voiceFsm": setIsVoiceFsmModalOpen(true); break;
+      case "whisper": setIsWhisperModalOpen(true); break;
+      case "kokoro": setIsKokoroModalOpen(true); break;
+      case "preflight": setIsPreflightModalOpen(true); break;
+      case "artifacts": setIsArtifactsModalOpen(true); break;
+      case "vaultBackup": setIsVaultBackupModalOpen(true); break;
+      case "composerBus": setIsComposerBusModalOpen(true); break;
+      case "docVault": setIsDocVaultModalOpen(true); break;
+      case "benchmark": setIsBenchmarkModalOpen(true); break;
+      case "contradiction": setIsContradictionModalOpen(true); break;
+      case "selfEdit": setIsSelfEditModalOpen(true); break;
+      case "capstone": setIsCapstoneModalOpen(true); break;
+    }
+    onResetRequestedModal?.();
+  }, [requestedModal, onResetRequestedModal]);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1055,791 +1113,67 @@ export function SaanStageChatView({
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
-      {/* 1. TOP LIVING COMPANION AVATAR STAGE */}
-      <section className="relative shrink-0 border-b border-zinc-800/80 bg-zinc-950/90 p-3 sm:p-4 transition-all duration-500">
-        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Living Avatar with AEIOU Lip-Sync & Micro-Animations */}
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <SaanLivingAvatar
-              emotion={avatarEmotion}
-              isSpeaking={isSpeaking}
-              isListening={isListening}
-              circadianState={circadian}
-              bondStage={profile?.bondStage || "Soulbound"}
-              bondScore={profile?.bondScore || 65}
-              onPoke={() => setAvatarEmotion("blush")}
-              onHeadpat={() => {
-                setAvatarEmotion("blush");
-                handleAffectionAction("headpat");
-              }}
-              onCheekPoke={() => {
-                setAvatarEmotion("curious");
-              }}
+      {/* 1. COMPACT SPEECH & AUDIO CONTROL BAR */}
+      <section className="relative shrink-0 border-b border-zinc-800/80 bg-zinc-950/80 px-4 py-2 transition-all">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-3">
+          {/* Audio Waveform Canvas */}
+          <div className="flex items-center gap-3">
+            <canvas
+              ref={canvasRef}
+              width={160}
+              height={24}
+              className="rounded-lg bg-zinc-900/60 border border-zinc-800/80 hidden sm:block"
             />
+            <SaanHearingStatusCapsule
+              isListening={isListening}
+              isSpeaking={isSpeaking}
+              audioLevel={audioLevel}
+              onToggleMic={toggleListening}
+            />
+          </div>
 
-            {/* Quick Interactive Affection Bar (HerAndHim) */}
-            <div className="hidden lg:flex flex-col gap-2 pl-4 border-l border-zinc-800/80">
-              <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
-                Companion Interaction
+          {/* Controls: Whisper Language, TTFA, Auto Voice */}
+          <div className="flex items-center gap-2">
+            <select
+              value={asrLanguage}
+              onChange={(e) => setAsrLanguage(e.target.value)}
+              aria-label="Whisper ASR Language"
+              className="bg-zinc-900 border border-zinc-800 hover:border-teal-500/40 text-teal-300 text-xs font-mono rounded-lg px-2 py-1 outline-none transition cursor-pointer"
+            >
+              <option value="hinglish">🇮🇳 Hinglish</option>
+              <option value="hi">🇮🇳 Hindi</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="ja">🇯🇵 Japanese</option>
+              <option value="es">🇪🇸 Spanish</option>
+              <option value="fr">🇫🇷 French</option>
+              <option value="de">🇩🇪 German</option>
+              <option value="auto">🌐 Auto</option>
+            </select>
+
+            {ttfaMs && (
+              <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-lg border border-zinc-800 hidden md:inline">
+                {ttfaMs}ms
               </span>
-              <SaanAffectionBar
-                onTriggerAction={handleAffectionAction}
-                bondScore={profile?.bondScore || 65}
-              />
-            </div>
-          </div>
+            )}
 
-          {/* Airi Hearing Capsule + Chronicler & Mimir Tools */}
-          <div className="flex flex-col items-center md:items-end gap-2 w-full md:w-auto">
-            {/* Top Toolbar: Chronicler & Mimir Superchargers */}
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              {/* Mimir: Flashbulb Memory Vault */}
-              <button
-                type="button"
-                onClick={() => setIsFlashbulbOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition shadow-xs"
-                title="View Flashbulb Memory Anchors (Never Decay)"
-              >
-                <Flame className="w-3.5 h-3.5 text-amber-400" />
-                <span>Flashbulb</span>
-                {flashbulbMemories.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/30 text-amber-200 font-mono font-bold">
-                    {flashbulbMemories.length}
-                  </span>
-                )}
-              </button>
-
-              {/* Mimir: Huginn Thought Raven Insights */}
-              <button
-                type="button"
-                onClick={() => setIsHuginnOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 transition shadow-xs"
-                title="View Huginn Emergent Trajectories & Patterns"
-              >
-                <Brain className="w-3.5 h-3.5 text-purple-400" />
-                <span>Huginn Patterns</span>
-                {huginnInsights.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/30 text-purple-200 font-mono font-bold">
-                    {huginnInsights.length}
-                  </span>
-                )}
-              </button>
-
-              {/* Chronicler: Promises / Consequence Ledger */}
-              <button
-                type="button"
-                onClick={() => setIsLedgerOpen(true)}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
-                  openDeedsCount > 0
-                    ? "bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25 animate-pulse"
-                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                }`}
-                title="View Open Commitments and Consequence Ledger"
-              >
-                <BookmarkCheck className="w-3.5 h-3.5 text-amber-400" />
-                <span>Promises</span>
-                {openDeedsCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/30 text-amber-200 font-mono font-bold">
-                    {openDeedsCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Chronicler: Previously On... Story Recap */}
-              <button
-                type="button"
-                onClick={() => setIsRecapOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition"
-                title="View Story Recap & Active Narrative Arcs"
-              >
-                <Film className="w-3.5 h-3.5 text-purple-400" />
-                <span>Story Recap</span>
-              </button>
-
-              {/* Airi: Toggle Pomodoro Focus Widget */}
-              <button
-                type="button"
-                onClick={() => setShowPomodoro((p) => !p)}
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition ${
-                  showPomodoro
-                    ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40"
-                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                }`}
-                title="Toggle Focus Sprint Pomodoro Widget"
-              >
-                <Timer className="w-3 h-3 text-cyan-400" />
-                <span>Sprint</span>
-              </button>
-
-              {/* Chronicler: Pacing Director Beat Trigger */}
-              <button
-                type="button"
-                onClick={handleTriggerBeat}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-cyan-300 hover:border-cyan-500/40 transition"
-                title="Inject Dynamic Conversational Beat (Break Deadlock)"
-              >
-                <Zap className="w-3 h-3 text-cyan-400" />
-                <span className="hidden sm:inline">Nudge Beat</span>
-              </button>
-
-              {/* SillyTavern: Export Character Card V2 */}
-              <button
-                type="button"
-                onClick={handleExportCard}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition cursor-pointer"
-                title="Export Saan Persona as SillyTavern Character Card V2"
-              >
-                <Download className="w-3 h-3 text-emerald-400" />
-                <span>Export CCv2</span>
-              </button>
-
-              {/* SillyTavern: Import Character Card V2/V3 */}
-              <button
-                type="button"
-                onClick={handleImportCard}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition cursor-pointer"
-                title="Import SillyTavern Character Card (JSON)"
-              >
-                <Upload className="w-3 h-3 text-indigo-400" />
-                <span>Import Card</span>
-              </button>
-
-              {/* RisuAI: Live Token Budget Gauge */}
-              {tokenBudget ? (
-                <div
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium border transition ${
-                    tokenBudget.inputTokens / tokenBudget.maxContextTokens > 0.85
-                      ? "bg-rose-500/15 text-rose-300 border-rose-500/40 animate-pulse"
-                      : tokenBudget.inputTokens / tokenBudget.maxContextTokens > 0.6
-                      ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
-                      : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                  }`}
-                  title={`Context Budget: ${tokenBudget.inputTokens} / ${tokenBudget.maxContextTokens} tok (${Math.round(
-                    (tokenBudget.inputTokens / tokenBudget.maxContextTokens) * 100
-                  )}%)\nRemaining Headroom: ${tokenBudget.headroomTokens}\nClamped Output: ${tokenBudget.outputTokens}${
-                    tokenBudget.wasPruned ? " (Oldest Turns Pruned!)" : ""
-                  }`}
-                >
-                  <Zap className="w-3 h-3 text-amber-400" />
-                  <span>
-                    {tokenBudget.inputTokens.toLocaleString()}/{tokenBudget.maxContextTokens.toLocaleString()}
-                  </span>
-                  {tokenBudget.wasPruned && (
-                    <span className="px-1 py-0.2 rounded text-[9px] bg-rose-500/30 text-rose-200 font-bold">
-                      PRUNED
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono text-zinc-400 bg-zinc-900 border border-zinc-800"
-                  title="Context Budget: 8k Tokens Headroom Active"
-                >
-                  <Zap className="w-3 h-3 text-zinc-500" />
-                  <span>8k Context</span>
-                </div>
-              )}
-
-              {/* RisuAI: Provider Cascade Resilience Status */}
-              <div
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono border transition ${
-                  providerTelemetry.fallbackTriggered
-                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                    : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                }`}
-                title={`Provider Cascade Telemetry: ${providerTelemetry.providerUsed} (Fallback: ${
-                  providerTelemetry.fallbackTriggered ? "Triggered" : "Direct"
-                })`}
-              >
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <span className="hidden xl:inline truncate max-w-[120px]">{providerTelemetry.providerUsed}</span>
-                <span className="xl:hidden">Cascade</span>
-              </div>
-
-              {/* RisuAI: Chat Variables Inspector Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsVariablesOpen(true)}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
-                title="Inspect & Tune Live Chat Variables"
-              >
-                <span className="font-mono text-purple-400 font-bold">{"{x}"}</span>
-                <span>Vars</span>
-              </button>
-
-              {/* RisuAI: Associative Graph Memory Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsGraphOpen(true)}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Explore Associative Knowledge Graph (GraphMem)"
-              >
-                <Network className="w-3 h-3 text-cyan-400" />
-                <span>GraphMem</span>
-              </button>
-
-              {/* Letta: Core Memory Pinned RAM Studio Drawer */}
-              {(() => {
-                const humanItem = coreMemSummary.find((s) => s.label === "human");
-                const personaItem = coreMemSummary.find((s) => s.label === "persona");
-                const totalChars =
-                  (humanItem?.length || coreMemBlocks.human.length) +
-                  (personaItem?.length || coreMemBlocks.persona.length);
-                const maxTotal = (humanItem?.maxCapacity || 2500) + (personaItem?.maxCapacity || 2500);
-                const pct = Math.round((totalChars / maxTotal) * 100);
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setIsCoreMemOpen(true)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium border transition cursor-pointer ${
-                      pct >= 80
-                        ? "bg-rose-500/15 text-rose-300 border-rose-500/40 animate-pulse"
-                        : pct >= 50
-                        ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
-                        : "bg-purple-900/40 hover:bg-purple-900/60 text-purple-200 border-purple-500/40"
-                    }`}
-                    title={`Letta Core Memory Blocks (Pinned in RAM): ${totalChars}/${maxTotal} chars (${pct}%)\nClick to inspect or edit Human and Persona blocks.`}
-                  >
-                    <Brain className="w-3.5 h-3.5 text-purple-400" />
-                    <span>CoreRAM: {pct}%</span>
-                  </button>
-                );
-              })()}
-
-              {/* Mem0: 4-State Mutation Matrix Inspector Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsMem0Open(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Mem0 4-State Mutation Matrix (ADD/UPDATE/DELETE/NONE)"
-              >
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Mem0: {mem0Events.length}</span>
-              </button>
-
-              {/* Graphiti: Bi-Temporal Knowledge Graph & Contradiction Visualizer Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsGraphitiOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Explore Graphiti Bi-Temporal Knowledge Graph & Contradiction Visualizer"
-              >
-                <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Graphiti</span>
-              </button>
-
-              {/* Cognee: Cognify Multi-Stage Pipeline & Rollback Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsCognifyOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
-                title="Inspect Cognee Multi-Stage Cognify Pipeline & Atomic Rollback Engine"
-              >
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>Cognify</span>
-              </button>
-
-              {/* Hindsight: Knapsack Fact Budget & Temporal Query Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsHindsightOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Inspect Hindsight Knapsack Fact Budgeting & Temporal Query Engine"
-              >
-                <Briefcase className="w-3.5 h-3.5 text-amber-400" />
-                <span>Hindsight</span>
-              </button>
-
-              {/* Datapace: Bi-Temporal Point-in-Time Scrubber Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsTimeTravelOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-sky-950/40 text-sky-300 border border-zinc-800 hover:border-sky-500/40 transition cursor-pointer"
-                title="Scrub Point-in-Time Knowledge State (Datapace Engine)"
-              >
-                <Clock className="w-3.5 h-3.5 text-sky-400" />
-                <span>Scrubber</span>
-              </button>
-
-              {/* Zep: Incremental Conversation Summary & Entity Tags Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsSummaryOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-indigo-950/40 text-indigo-300 border border-zinc-800 hover:border-indigo-500/40 transition cursor-pointer"
-                title="Inspect Incremental Conversation Summary & Entity Tags (Zep / LangMem Engine)"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Summary</span>
-              </button>
-
-              {/* Memobase: Categorical User Profile & Fact Merger Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsProfileOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
-                title="Inspect Categorical User Profile & Fact Merger (Memobase Engine)"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-teal-400" />
-                <span>Profile</span>
-              </button>
-
-              {/* SuperAGI: Multi-Tier Memory Queue Buffer Inspector Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsBufferedQueueOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Inspect Multi-Tier Write Buffer Queue (SuperAGI & TeleMem Engine)"
-              >
-                <Inbox className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Buffer{bufferedQueueCount > 0 ? `: ${bufferedQueueCount}` : ""}</span>
-              </button>
-
-              {/* Dify & Gnosys: Portable Memory Interchange Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsPortableMemoryOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Sovereign Memory Snapshot Interchange (Gnosys & Dify Spec)"
-              >
-                <HardDriveDownload className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Interchange</span>
-              </button>
-
-              {/* MemGPT v2: Ephemeral Working Scratchpad Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsScratchpadOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
-                title="Inspect Live Working Scratchpad & Multi-Step Reasoning Trace (MemGPT v2 Engine)"
-              >
-                <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
-                <span>Scratchpad</span>
-              </button>
-
-              {/* OpenHands: Visual Action Execution Timeline Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsActionTimelineOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-orange-950/40 text-orange-300 border border-zinc-800 hover:border-orange-500/40 transition cursor-pointer"
-                title="Inspect Visual Action Execution Timeline (OpenHands Engine)"
-              >
-                <Activity className="w-3.5 h-3.5 text-orange-400" />
-                <span>Timeline</span>
-              </button>
-
-              {/* AutoGPT: Dirty JSON Repair Debug Drawer Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsJsonDebugOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Dirty JSON Repair Drawer & Split View (AutoGPT & Agent Zero Engine)"
-              >
-                <Wrench className="w-3.5 h-3.5 text-emerald-400" />
-                <span>JsonRepair</span>
-              </button>
-
-              {/* TriggerRecall: Proactive Morning Chai & Evening Unwind Modal Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsProactiveTriggerOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Proactive Morning Chai & Evening Unwind Active Hours Manager (TriggerRecall Engine)"
-              >
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span>Proactive</span>
-              </button>
-
-              {/* MemoryEvalJudge: Ground-Truth Memory Fidelity Judge & Telemetry Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsMemoryEvalJudgeOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Inspect Ground-Truth Memory Fidelity Judge & Multi-Metric Telemetry (MemoryEvalJudge Engine)"
-              >
-                <Scale className="w-3.5 h-3.5 text-cyan-400" />
-                <span>EvalJudge</span>
-              </button>
-
-              {/* AssociativeMemory: Spreading Activation Graph Network Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsAssociativeNetworkOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
-                title="Inspect Spreading Activation Cognitive Graph & Concept Clusters (AssociativeMemory Engine)"
-              >
-                <Workflow className="w-3.5 h-3.5 text-violet-400" />
-                <span>AssocWeb</span>
-              </button>
-
-              {/* CrewAI: Distributed State Lease & Mutex Manager Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsStateLeaseOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
-                title="Inspect Distributed State Lease Mutex & Fencing Tokens (CrewAI Engine)"
-              >
-                <Lock className="w-3.5 h-3.5 text-teal-400" />
-                <span>LeaseLock</span>
-              </button>
-
-              {/* LangGraph: Cyclic Multi-Agent Research Planner Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsResearchWorkflowOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-indigo-950/40 text-indigo-300 border border-zinc-800 hover:border-indigo-500/40 transition cursor-pointer"
-                title="Inspect Cyclic Multi-Agent Research Planner & Checkpoints (LangGraph Engine)"
-              >
-                <Compass className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Planner</span>
-              </button>
-
-              {/* Smolagents: Interactive Confirmation Gate Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsGateModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Inspect 3-Tier Interactive Confirmation Gate & Sandboxed Execution (Smolagents Engine)"
-              >
-                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                <span>ConfGate</span>
-                {pendingGateCount > 0 && (
-                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    {pendingGateCount}
-                  </span>
-                )}
-              </button>
-
-              {/* AutoGen: Idempotency Backoff Retry Telemetry Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsRetryTelemetryOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Inspect AutoGen & n8n Idempotency Backoff, DLQ & Latency Telemetry"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Backoff</span>
-                {activeRetryCount > 0 && (
-                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                    {activeRetryCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Huginn: Agent Lifecycle Hooks Registry Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsLifecycleHookOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
-                title="Inspect Huginn Agent Lifecycle Hooks Registry & Execution Monitor"
-              >
-                <Webhook className="w-3.5 h-3.5 text-purple-400" />
-                <span>Hooks</span>
-                {activeHookCount > 0 && (
-                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {activeHookCount}
-                  </span>
-                )}
-              </button>
-
-              {/* SearXNG & Khoj: Privacy Metasearch & Query Decomposition Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsMetasearchOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-blue-950/40 text-blue-300 border border-zinc-800 hover:border-blue-500/40 transition cursor-pointer"
-                title="Inspect SearXNG & Khoj Privacy Metasearch & Query Decomposition (Repos #29 & #30)"
-              >
-                <Globe className="w-3.5 h-3.5 text-blue-400" />
-                <span>MetaSearch</span>
-              </button>
-
-              {/* Firecrawl: Clean Markdown Reader Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsCleanReaderOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-orange-950/40 text-orange-300 border border-zinc-800 hover:border-orange-500/40 transition cursor-pointer"
-                title="Inspect Firecrawl Clean Markdown Reader & Scraper (Repo #31)"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-orange-400" />
-                <span>Reader</span>
-              </button>
-
-              {/* Crawl4AI: Security Fence & Injection Shield Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsSecurityFenceOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Crawl4AI Web Security Fence & Prompt Injection Shield (Repo #32)"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Shield</span>
-                {blockedThreatCount > 0 && (
-                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    {blockedThreatCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Browser-Use: Accessibility Tree DOM Parser Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsAccessibilityTreeOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Browser-Use Accessibility DOM Tree & Interactive Element Map (Repo #33)"
-              >
-                <Target className="w-3.5 h-3.5 text-emerald-400" />
-                <span>DOMTree</span>
-              </button>
-
-              {/* Playwright: Stealth Anti-Bot Headers Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsStealthModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Inspect Playwright Stealth Anti-Bot HTTP Header Synthesis & Fingerprints (Repo #34)"
-              >
-                <EyeOff className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Stealth</span>
-              </button>
-
-              {/* MCP: Model Context Protocol 2.x JSON-RPC Explorer Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsMcpModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
-                title="Inspect Anthropic Model Context Protocol (MCP 2.x) JSON-RPC Bridge (Repo #35)"
-              >
-                <Cpu className="w-3.5 h-3.5 text-violet-400" />
-                <span>MCP</span>
-              </button>
-
-              {/* Pipecat: Real-Time Audio Streaming Pipeline Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsPipecatModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-yellow-950/40 text-yellow-300 border border-zinc-800 hover:border-yellow-500/40 transition cursor-pointer"
-                title="Inspect Pipecat Real-Time Audio Streaming Frame Pipeline & Barge-In Mutex (Repo #36)"
-              >
-                <Zap className="w-3.5 h-3.5 text-yellow-400" />
-                <span>Pipecat</span>
-                {pipecatQueueCount > 0 && (
-                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                    {pipecatQueueCount}
-                  </span>
-                )}
-              </button>
-
-              {/* LiveKit Agents: Voice Turn-Taking FSM Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsVoiceFsmModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Inspect LiveKit Agents Voice Turn-Taking FSM & OVOS Normalizer (Repo #37)"
-              >
-                <Mic className="w-3.5 h-3.5 text-amber-400" />
-                <span>VoiceFSM</span>
-                <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  {voiceFsmState}
-                </span>
-              </button>
-
-              {/* Whisper: Multilingual ASR Normalizer & Decoding Fallback Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsWhisperModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-teal-950/40 text-teal-300 border border-zinc-800 hover:border-teal-500/40 transition cursor-pointer"
-                title="Inspect OpenAI Whisper Multilingual ASR Normalizer & Temperature Cascade (Repo #38)"
-              >
-                <Mic className="w-3.5 h-3.5 text-teal-400" />
-                <span>Whisper</span>
-              </button>
-
-              {/* Kokoro: Circadian Prosody & AST Text Splitter Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsKokoroModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-pink-950/40 text-pink-300 border border-zinc-800 hover:border-pink-500/40 transition cursor-pointer"
-                title="Inspect Kokoro Circadian Prosody & AST Text Splitter (Repo #39)"
-              >
-                <Music className="w-3.5 h-3.5 text-pink-400" />
-                <span>Kokoro</span>
-              </button>
-
-              {/* Open-WebUI: Preflight Filter Valves & Generation Settings Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsPreflightModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Open-WebUI Preflight Security Valves & Generation Controls (Repo #41)"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Preflight</span>
-              </button>
-
-              {/* LibreChat & HuggingFace: Modular Artifacts & CoT Reasoning Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsArtifactsModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
-                title="Inspect LibreChat Modular Artifacts & HuggingFace CoT Reasoning (Repos #42 & #43)"
-              >
-                <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Artifacts</span>
-              </button>
-
-              {/* Chatbox: Sovereign Vault Package & Checksum Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsVaultBackupModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Inspect Chatbox Sovereign Encrypted Vault & SHA-256 Checksum (Repo #44)"
-              >
-                <Archive className="w-3.5 h-3.5 text-amber-400" />
-                <span>VaultBackup</span>
-              </button>
-
-              {/* LobeHub: Composer Draft Bus & Intent Classifier Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsComposerBusModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
-                title="Inspect LobeHub Composer Draft Bus & Multi-Session Routing (Repo #45)"
-              >
-                <PenTool className="w-3.5 h-3.5 text-violet-400" />
-                <span>ComposerBus</span>
-              </button>
-
-              {/* Anything-LLM: Document Collector Vault & Wikilink Graph Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsDocVaultModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
-                title="Inspect Anything-LLM Document Collector Vault & Clickable Wikilinks (Repo #46)"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
-                <span>DocVault</span>
-              </button>
-
-              {/* LongMemEval: Cognitive Memory Benchmark & Dual-Judge Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsBenchmarkModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-indigo-950/40 text-indigo-300 border border-zinc-800 hover:border-indigo-500/40 transition cursor-pointer"
-                title="Inspect LongMemEval Cognitive Memory Benchmarks & LoCoMo Evaluation (Repo #47)"
-              >
-                <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Benchmarks</span>
-              </button>
-
-              {/* Graphiti Calculus Engine: Contradiction Graph & Topological Memory Sort Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsContradictionModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
-                title="Inspect Graphiti Calculus Engine & Contradiction Graph (Repo #48)"
-              >
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Calculus</span>
-              </button>
-
-              {/* Letta: Core Memory Blocks & Agentic Self-Editing Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsSelfEditModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-fuchsia-950/40 text-fuchsia-300 border border-zinc-800 hover:border-fuchsia-500/40 transition cursor-pointer"
-                title="Inspect Letta Core Memory Blocks & Agentic Self-Editing (Repo #49)"
-              >
-                <Brain className="w-3.5 h-3.5 text-fuchsia-400" />
-                <span>SelfEdit</span>
-              </button>
-
-              {/* Mem0 & 50-Repo Grand Capstone Audit Trigger */}
-              <button
-                type="button"
-                onClick={() => setIsCapstoneModalOpen(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-gradient-to-r from-amber-950/60 to-yellow-950/60 hover:from-amber-900/80 hover:to-yellow-900/80 text-amber-300 border border-amber-500/50 hover:border-amber-400 transition cursor-pointer shadow-lg shadow-amber-500/10"
-                title="Inspect 50 Companion Repositories Capstone Audit & Prompt Injection Sanitizer (Repo #50)"
-              >
-                <Crown className="w-3.5 h-3.5 text-amber-400" />
-                <span className="font-semibold text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-yellow-400">
-                  Capstone
-                </span>
-              </button>
-            </div>
-
-            {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
-            <div className="flex items-center gap-2">
-              <SaanHearingStatusCapsule
-                isListening={isListening}
-                isSpeaking={isSpeaking}
-                audioLevel={audioLevel}
-                onToggleMic={toggleListening}
-              />
-
-              {/* Whisper ASR Multilingual Language Selector (Repo #40) */}
-              <div className="relative inline-flex items-center">
-                <select
-                  value={asrLanguage}
-                  onChange={(e) => setAsrLanguage(e.target.value)}
-                  aria-label="Whisper ASR Recognition Language"
-                  className="bg-zinc-900 border border-zinc-800 hover:border-teal-500/40 text-teal-300 text-xs font-mono rounded-lg px-2 py-1 outline-none transition cursor-pointer"
-                  title="Whisper Multilingual ASR Recognition Language (Repo #40)"
-                >
-                  <option value="hinglish">🇮🇳 Hinglish</option>
-                  <option value="hi">🇮🇳 Hindi</option>
-                  <option value="en">🇬🇧 English</option>
-                  <option value="ja">🇯🇵 Japanese</option>
-                  <option value="es">🇪🇸 Spanish</option>
-                  <option value="fr">🇫🇷 French</option>
-                  <option value="de">🇩🇪 German</option>
-                  <option value="auto">🌐 Auto-Detect</option>
-                </select>
-              </div>
-
-              {ttfaMs && (
-                <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900/80 px-2 py-1 rounded-xl border border-zinc-800">
-                  TTFA: {ttfaMs}ms
-                </span>
-              )}
-
-              {/* TTS Voice Toggle */}
-              <button
-                type="button"
-                onClick={() => setVoiceEnabled((p) => !p)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-medium border transition ${
-                  voiceEnabled
-                    ? "bg-purple-600/30 text-purple-300 border-purple-500/50"
-                    : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
-                }`}
-                title="Toggle Auto-Voice Speech Synthesis"
-              >
-                {voiceEnabled ? <Volume2 className="h-3 w-3" /> : <VolumeX className="h-3 w-3" />}
-                <span>Auto Voice</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigateTab?.("persona")}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-zinc-200 hover:border-zinc-700 transition"
-                title="Open Persona & Lorebook Studio"
-              >
-                <Sliders className="h-3 w-3 text-purple-400" />
-                <span className="hidden sm:inline">Persona Studio</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setVoiceEnabled((p) => !p)}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition ${
+                voiceEnabled
+                  ? "bg-purple-600/30 text-purple-300 border-purple-500/50"
+                  : "bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200"
+              }`}
+            >
+              {voiceEnabled ? <Volume2 className="h-3.5 w-3.5" /> : <VolumeX className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">Voice</span>
+            </button>
           </div>
         </div>
 
-        {/* Mobile Affection Bar (Visible on smaller screens) */}
-        <div className="flex lg:hidden mt-3 pt-2.5 border-t border-zinc-800/60 justify-center">
-          <SaanAffectionBar
-            onTriggerAction={handleAffectionAction}
-            bondScore={profile?.bondScore || 65}
-          />
-        </div>
-
-        {/* Airi Interactive Calling Component: Focus Sprint Pomodoro Widget */}
+        {/* Airi Focus Sprint Pomodoro Widget */}
         {showPomodoro && (
-          <div className="max-w-4xl mx-auto mt-3 animate-in fade-in duration-300">
+          <div className="max-w-4xl mx-auto mt-2 animate-in fade-in duration-300">
             <SaanPomodoroWidget
               onSessionComplete={(mins) =>
                 handleSend(

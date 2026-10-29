@@ -3,25 +3,32 @@
 import * as React from "react";
 import {
   Sparkles,
-  MessageSquare,
   BookOpen,
   Share2,
   Compass,
   Zap,
   Mic,
-  Activity,
-  Sliders,
+  PanelLeft,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { SaanStageChatView } from "./SaanStageChatView";
 import { SaanPersonaStudioView } from "./SaanPersonaStudioView";
 import { SaanKnowledgeGraphView } from "./SaanKnowledgeGraphView";
 import { SaanMoodCompassView } from "./SaanMoodCompassView";
 import { SaanActionInspectorView } from "./SaanActionInspectorView";
+import { SaanSidebar } from "./SaanSidebar";
+import { SaanLivingAvatar, type AvatarEmotion } from "./SaanLivingAvatar";
+import { SaanAffectionBar } from "./SaanAffectionBar";
 
 export type SaanStudioTab = "stage" | "persona" | "graph" | "soul" | "tools";
 
 export function SaanContainer() {
   const [activeTab, setActiveTab] = React.useState<SaanStudioTab>("stage");
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [requestedModal, setRequestedModal] = React.useState<string | null>(null);
+  const [avatarEmotion, setAvatarEmotion] = React.useState<AvatarEmotion>("neutral");
+
   const [soulData, setSoulData] = React.useState<any>({
     profile: null,
     relationship: null,
@@ -61,114 +68,120 @@ export function SaanContainer() {
   }, [refreshSoulData]);
 
   const memoryCount = soulData.memories?.length ?? 0;
-  const diaryCount = soulData.diary?.length ?? 0;
   const loreCount = soulData.lorebookEntries?.length ?? 0;
-  const bondScore = soulData.profile?.bondScore ?? 50;
+  const bondScore = soulData.profile?.bondScore ?? 65;
+  const circadian = soulData.profile?.circadianState || "morning_chai";
+
+  const handleOpenModalFromSidebar = (modalId: string) => {
+    setRequestedModal(modalId);
+    if (activeTab !== "stage") {
+      setActiveTab("stage");
+    }
+    setIsSidebarOpen(false);
+  };
 
   return (
-    <div className="flex flex-col h-full w-full min-w-0 overflow-hidden bg-zinc-950 font-sans text-zinc-100 select-none">
-      {/* Universal 5-Pillar Studio Header Bar */}
+    <div className="flex flex-col h-full w-full min-w-0 overflow-hidden bg-zinc-950 font-sans text-zinc-100 select-none relative">
+      {/* Slideable Sidebar Drawer */}
+      <SaanSidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        activeTab={activeTab}
+        onSelectTab={(tab) => {
+          setActiveTab(tab);
+          setIsSidebarOpen(false);
+        }}
+        loreCount={loreCount}
+        memoryCount={memoryCount}
+        bondScore={bondScore}
+        openDeedsCount={soulData.openDeedsCount || 0}
+        flashbulbCount={soulData.flashbulbMemories?.length || 0}
+        huginnCount={soulData.huginnInsights?.length || 0}
+        tokenBudget={soulData.tokenBudget}
+        providerUsed={soulData.providerUsed || "Vault Cascade"}
+        onOpenModal={handleOpenModalFromSidebar}
+      />
+
+      {/* BAR 1: TOP CLEAN HEADER BAR */}
       <header className="h-12 shrink-0 border-b border-zinc-800 bg-zinc-950/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between z-20">
-        {/* Left Branding */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 font-bold text-xs border border-purple-500/20 shadow-xs">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Saan 50-Studio</span>
+        {/* Left Side: Sidebar Toggle & Branding */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen((prev) => !prev)}
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-purple-900/40 text-zinc-300 hover:text-purple-200 border border-zinc-800 hover:border-purple-500/40 transition flex items-center gap-1.5 text-xs font-semibold"
+            title="Toggle Sidebar Menu"
+          >
+            <PanelLeft className="w-4 h-4 text-purple-400" />
+            <span className="hidden sm:inline">Menu</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 font-bold text-xs border border-purple-500/20 shadow-xs">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Saan 50-Studio</span>
+            </div>
+            <span className="text-zinc-700 hidden sm:inline">|</span>
+            <span className="text-xs text-zinc-400 font-medium hidden md:inline">
+              Living Companion Matrix
+            </span>
           </div>
-          <span className="text-zinc-700 hidden sm:inline">|</span>
-          <span className="text-xs text-zinc-400 font-medium hidden md:inline">
-            Living Companion Matrix
-          </span>
         </div>
 
-        {/* Studio Switcher Segmented Control */}
-        <div className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 shadow-inner overflow-x-auto">
-          {/* 1. Living Stage & Chat */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("stage")}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              activeTab === "stage"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-            }`}
-          >
-            <Mic className="w-3.5 h-3.5" />
-            <span>Living Stage</span>
-          </button>
-
-          {/* 2. Persona & Lorebook Studio */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("persona")}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              activeTab === "persona"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-            }`}
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>Persona & Lore</span>
-            {loreCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">
-                {loreCount}
-              </span>
-            )}
-          </button>
-
-          {/* 3. Knowledge Graph */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("graph")}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              activeTab === "graph"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-            }`}
-          >
-            <Share2 className="w-3.5 h-3.5" />
-            <span>Knowledge Graph</span>
-            {memoryCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/20 text-purple-300 font-mono">
-                {memoryCount}
-              </span>
-            )}
-          </button>
-
-          {/* 4. Soul & Mood Compass */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("soul")}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              activeTab === "soul"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" />
-            <span>Mood Compass</span>
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-pink-500/20 text-pink-300 font-mono">
-              {bondScore}%
-            </span>
-          </button>
-
-          {/* 5. Autonomous Action & Vault */}
-          <button
-            type="button"
-            onClick={() => setActiveTab("tools")}
-            className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ${
-              activeTab === "tools"
-                ? "bg-purple-600 text-white shadow-sm"
-                : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50"
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>Action & Vault</span>
-          </button>
+        {/* Right Side: Active Tab Indicator & Quick Stats */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-purple-300 font-mono font-medium">
+            {activeTab === "stage" && "🎙️ Living Stage"}
+            {activeTab === "persona" && "📚 Persona & Lore"}
+            {activeTab === "graph" && "🕸️ Knowledge Graph"}
+            {activeTab === "soul" && "🧭 Mood Compass"}
+            {activeTab === "tools" && "⚡ Action & Vault"}
+          </span>
+          <span className="px-2 py-0.5 rounded-full text-xs bg-pink-500/20 text-pink-300 font-mono font-bold border border-pink-500/30">
+            {bondScore}% Bond
+          </span>
         </div>
       </header>
 
-      {/* Main Studio Viewport */}
+      {/* BAR 2: SUB-HEADER BAR WITH ONLY SAAN'S FACE / AVATAR */}
+      <section className="shrink-0 border-b border-zinc-800/80 bg-zinc-950/90 py-2.5 px-4 z-10">
+        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+          {/* Saan's Face Avatar */}
+          <div className="flex items-center gap-3">
+            <SaanLivingAvatar
+              emotion={avatarEmotion}
+              isSpeaking={false}
+              isListening={false}
+              circadianState={circadian}
+              bondStage={soulData.profile?.bondStage || "Soulbound"}
+              bondScore={bondScore}
+              onPoke={() => setAvatarEmotion("blush")}
+              onHeadpat={() => setAvatarEmotion("blush")}
+              onCheekPoke={() => setAvatarEmotion("curious")}
+            />
+
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-purple-300 flex items-center gap-1">
+                Saan Living Companion
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              </span>
+              <span className="text-[10px] text-zinc-400">
+                {soulData.profile?.mood || "Affectionate"} • {circadian}
+              </span>
+            </div>
+          </div>
+
+          {/* Compact Affection Bar */}
+          <div className="hidden sm:flex items-center gap-2">
+            <SaanAffectionBar
+              onTriggerAction={() => setAvatarEmotion("joy")}
+              bondScore={bondScore}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* MAIN STUDIO VIEWPORT */}
       <main className="flex-1 min-h-0 min-w-0 overflow-hidden relative">
         {activeTab === "stage" && (
           <SaanStageChatView
@@ -182,6 +195,8 @@ export function SaanContainer() {
             huginnInsights={soulData.huginnInsights || []}
             onRefreshSoul={refreshSoulData}
             onNavigateTab={(tab) => setActiveTab(tab)}
+            requestedModal={requestedModal}
+            onResetRequestedModal={() => setRequestedModal(null)}
           />
         )}
         {activeTab === "persona" && (

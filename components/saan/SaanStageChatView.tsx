@@ -53,6 +53,7 @@ import {
   Cpu,
   Music,
   Archive,
+  PenTool,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -86,6 +87,7 @@ import { SaanKokoroCadenceModal } from "./SaanKokoroCadenceModal";
 import { SaanPreflightPipelineModal } from "./SaanPreflightPipelineModal";
 import { SaanArtifactReasoningModal } from "./SaanArtifactReasoningModal";
 import { SaanVaultBackupModal } from "./SaanVaultBackupModal";
+import { SaanComposerBusModal } from "./SaanComposerBusModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -286,6 +288,9 @@ export function SaanStageChatView({
 
   // Chatbox Sovereign Encrypted Vault & Checksum State
   const [isVaultBackupModalOpen, setIsVaultBackupModalOpen] = React.useState(false);
+
+  // LobeHub Composer Draft Bus & Multi-Session Routing State
+  const [isComposerBusModalOpen, setIsComposerBusModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1680,6 +1685,17 @@ export function SaanStageChatView({
                 <Archive className="w-3.5 h-3.5 text-amber-400" />
                 <span>VaultBackup</span>
               </button>
+
+              {/* LobeHub: Composer Draft Bus & Intent Classifier Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsComposerBusModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
+                title="Inspect LobeHub Composer Draft Bus & Multi-Session Routing (Repo #45)"
+              >
+                <PenTool className="w-3.5 h-3.5 text-violet-400" />
+                <span>ComposerBus</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2631,6 +2647,13 @@ export function SaanStageChatView({
       <SaanVaultBackupModal
         isOpen={isVaultBackupModalOpen}
         onClose={() => setIsVaultBackupModalOpen(false)}
+      />
+
+      {/* LobeHub Composer Draft Bus Modal */}
+      <SaanComposerBusModal
+        isOpen={isComposerBusModalOpen}
+        onClose={() => setIsComposerBusModalOpen(false)}
+        onInjectDraftToComposer={(text) => setInput(text)}
       />
     </div>
   );

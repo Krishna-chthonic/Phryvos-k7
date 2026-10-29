@@ -243,3 +243,6 @@ export class ComposerDraftBus {
     };
   }
 }
+
+export const globalComposerDraftBus = new ComposerDraftBus();
+

@@ -38,6 +38,7 @@ import {
   globalPreflightPipeline,
   globalArtifactReasoningEngine,
   globalVaultBackupEngine,
+  globalComposerDraftBus,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1159,6 +1160,42 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         result,
+      });
+    }
+
+    // LobeHub Composer Draft Bus & Intent Classification (Repo #45) Endpoints
+    if (body.type === "get_composer_draft") {
+      const hasDraft = globalComposerDraftBus.hasDraft();
+      return NextResponse.json({
+        ok: true,
+        hasDraft,
+      });
+    }
+
+    if (body.type === "post_composer_draft" && body.text !== undefined) {
+      const posted = globalComposerDraftBus.postDraft(body.text, {
+        append: body.append,
+        targetAgentId: body.targetAgentId,
+      });
+      return NextResponse.json({
+        ok: true,
+        posted,
+      });
+    }
+
+    if (body.type === "consume_composer_draft") {
+      const draft = globalComposerDraftBus.consumeDraft();
+      return NextResponse.json({
+        ok: true,
+        draft,
+      });
+    }
+
+    if (body.type === "classify_composer_intent" && body.prompt !== undefined) {
+      const classification = globalComposerDraftBus.classifyIntent(body.prompt);
+      return NextResponse.json({
+        ok: true,
+        classification,
       });
     }
 

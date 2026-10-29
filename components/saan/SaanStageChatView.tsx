@@ -32,9 +32,11 @@ import {
   AlertTriangle,
   GitBranch,
   Layers,
+  Briefcase,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
+import { SaanHindsightBudgetModal } from "./SaanHindsightBudgetModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -137,6 +139,9 @@ export function SaanStageChatView({
 
   // Cognee Cognify Multi-Stage Pipeline State
   const [isCognifyOpen, setIsCognifyOpen] = React.useState(false);
+
+  // Hindsight Knapsack Fact Budget State
+  const [isHindsightOpen, setIsHindsightOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1163,6 +1168,17 @@ export function SaanStageChatView({
                 <Layers className="w-3.5 h-3.5 text-purple-400" />
                 <span>Cognify</span>
               </button>
+
+              {/* Hindsight: Knapsack Fact Budget & Temporal Query Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsHindsightOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Inspect Hindsight Knapsack Fact Budgeting & Temporal Query Engine"
+              >
+                <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+                <span>Hindsight</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1883,6 +1899,12 @@ export function SaanStageChatView({
       <SaanCognifyPipelineModal
         isOpen={isCognifyOpen}
         onClose={() => setIsCognifyOpen(false)}
+      />
+
+      {/* Hindsight Knapsack Fact Budget Modal */}
+      <SaanHindsightBudgetModal
+        isOpen={isHindsightOpen}
+        onClose={() => setIsHindsightOpen(false)}
       />
     </div>
   );

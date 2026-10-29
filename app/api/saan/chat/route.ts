@@ -59,6 +59,11 @@ import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
 import { getMem0AuditLog } from "@/lib/saan/mem0-decision-matrix";
 import { getTemporalEdgeGraphStore } from "@/lib/saan/temporal-edge-graph";
 import { getCognifyPipelineManager } from "@/lib/saan/cognify-pipeline";
+import {
+  generateKnapsackBudgetReport,
+  parseTemporalQueryBounds,
+  getCausalMemoryRegistry,
+} from "@/lib/saan/temporal-query-engine";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -195,6 +200,27 @@ export async function POST(req: NextRequest) {
         simulateFailureStage: body.simulateFailureStage,
       });
       return NextResponse.json({ ok: true, report, history: manager.getHistory() });
+    }
+
+    // Hindsight Knapsack Fact Budget & Temporal Query Engine
+    if (body.type === "get_hindsight_budget") {
+      const budgetCap = body.budgetCap ? Number(body.budgetCap) : 1200;
+      const report = generateKnapsackBudgetReport(budgetCap);
+      const causalLinks = getCausalMemoryRegistry().getAllLinks();
+      return NextResponse.json({ ok: true, report, causalLinks });
+    }
+    if (body.type === "parse_temporal_query" && body.query) {
+      const bounds = parseTemporalQueryBounds(body.query);
+      return NextResponse.json({ ok: true, bounds });
+    }
+    if (body.type === "add_causal_link" && body.cause && body.effect) {
+      const link = getCausalMemoryRegistry().addCausalLink(
+        body.cause,
+        body.effect,
+        body.description || "Conversational causality",
+        body.confidence ?? 0.95
+      );
+      return NextResponse.json({ ok: true, link, causalLinks: getCausalMemoryRegistry().getAllLinks() });
     }
 
     const rawUserMessage = body.message;

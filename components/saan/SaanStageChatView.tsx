@@ -38,6 +38,7 @@ import {
   UserCheck,
   Inbox,
   HardDriveDownload,
+  BrainCircuit,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -47,6 +48,7 @@ import { SaanIncrementalSummaryModal } from "./SaanIncrementalSummaryModal";
 import { SaanProfileExtractorModal } from "./SaanProfileExtractorModal";
 import { SaanBufferedQueueModal } from "./SaanBufferedQueueModal";
 import { SaanPortableMemoryModal } from "./SaanPortableMemoryModal";
+import { SaanWorkingScratchpadModal } from "./SaanWorkingScratchpadModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -168,6 +170,9 @@ export function SaanStageChatView({
 
   // Gnosys & Dify Portable Memory Interchange State
   const [isPortableMemoryOpen, setIsPortableMemoryOpen] = React.useState(false);
+
+  // MemGPT v2 Working Scratchpad State
+  const [isScratchpadOpen, setIsScratchpadOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1260,6 +1265,17 @@ export function SaanStageChatView({
                 <HardDriveDownload className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Interchange</span>
               </button>
+
+              {/* MemGPT v2: Ephemeral Working Scratchpad Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsScratchpadOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
+                title="Inspect Live Working Scratchpad & Multi-Step Reasoning Trace (MemGPT v2 Engine)"
+              >
+                <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                <span>Scratchpad</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2041,6 +2057,12 @@ export function SaanStageChatView({
             })
             .catch(() => {});
         }}
+      />
+
+      {/* MemGPT v2 Ephemeral Working Scratchpad Modal */}
+      <SaanWorkingScratchpadModal
+        isOpen={isScratchpadOpen}
+        onClose={() => setIsScratchpadOpen(false)}
       />
     </div>
   );

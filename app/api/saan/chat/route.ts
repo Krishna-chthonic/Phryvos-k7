@@ -74,6 +74,7 @@ import {
   type GnosysMemoryFact,
   type GnosysMemoryEdge,
 } from "@/lib/saan/portable-memory-spec";
+import { getWorkingScratchpadManager } from "@/lib/saan/working-scratchpad";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -407,6 +408,28 @@ export async function POST(req: NextRequest) {
           coreMemoryChars: mergeResult.mergedCoreMemory.persona.length + mergeResult.mergedCoreMemory.human.length,
         },
       });
+    }
+
+    // MemGPT v2 Working Scratchpad Endpoints
+    if (body.type === "get_working_scratchpad") {
+      const spMgr = getWorkingScratchpadManager();
+      const coreMgr = getCoreMemoryManager();
+      const personaBlock = coreMgr.getBlock("persona");
+      const humanBlock = coreMgr.getBlock("human");
+      const coreChars = (personaBlock?.content?.length || 0) + (humanBlock?.content?.length || 0);
+      const archivalCount = getSaanMemories(50).length;
+
+      const current = spMgr.getCurrentSession();
+      const recent = spMgr.getRecentSessions(8);
+      const metrics = spMgr.getMetrics(coreChars, archivalCount);
+
+      return NextResponse.json({ ok: true, current, recent, metrics });
+    }
+
+    if (body.type === "simulate_scratchpad_trace" && body.prompt) {
+      const spMgr = getWorkingScratchpadManager();
+      const steps = spMgr.simulateReasoningTrace(body.prompt, "Saan");
+      return NextResponse.json({ ok: true, steps, current: spMgr.getCurrentSession() });
     }
 
     const rawUserMessage = body.message;

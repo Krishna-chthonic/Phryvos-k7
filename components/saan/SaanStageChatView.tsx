@@ -53,6 +53,7 @@ import { SaanPortableMemoryModal } from "./SaanPortableMemoryModal";
 import { SaanWorkingScratchpadModal } from "./SaanWorkingScratchpadModal";
 import { SaanActionTimelineModal } from "./SaanActionTimelineModal";
 import { SaanDirtyJsonDebugModal } from "./SaanDirtyJsonDebugModal";
+import { SaanProactiveTriggerModal } from "./SaanProactiveTriggerModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -183,6 +184,9 @@ export function SaanStageChatView({
 
   // AutoGPT Dirty JSON Repair Debug State
   const [isJsonDebugOpen, setIsJsonDebugOpen] = React.useState(false);
+
+  // TriggerRecall Proactive Engine State
+  const [isProactiveTriggerOpen, setIsProactiveTriggerOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1308,6 +1312,17 @@ export function SaanStageChatView({
                 <Wrench className="w-3.5 h-3.5 text-emerald-400" />
                 <span>JsonRepair</span>
               </button>
+
+              {/* TriggerRecall: Proactive Morning Chai & Evening Unwind Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsProactiveTriggerOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Proactive Morning Chai & Evening Unwind Active Hours Manager (TriggerRecall Engine)"
+              >
+                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                <span>Proactive</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2107,6 +2122,12 @@ export function SaanStageChatView({
       <SaanDirtyJsonDebugModal
         isOpen={isJsonDebugOpen}
         onClose={() => setIsJsonDebugOpen(false)}
+      />
+
+      {/* TriggerRecall Proactive Morning Chai & Evening Unwind Modal */}
+      <SaanProactiveTriggerModal
+        isOpen={isProactiveTriggerOpen}
+        onClose={() => setIsProactiveTriggerOpen(false)}
       />
     </div>
   );

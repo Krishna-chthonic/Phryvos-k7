@@ -255,3 +255,117 @@ export function generateEveningUnwindRecap(
   parts.push("\nYou put in solid work today. Time to rest your mind and recharge for tomorrow.");
   return parts.join("\n");
 }
+
+export interface ProactiveTriggerConfig {
+  morningChai: {
+    enabled: boolean;
+    time: string; // HH:MM
+    activeWindow: CronActiveHours;
+  };
+  eveningUnwind: {
+    enabled: boolean;
+    time: string; // HH:MM
+    activeWindow: CronActiveHours;
+  };
+  timezone: string;
+}
+
+export class ProactiveTriggerManager {
+  private config: ProactiveTriggerConfig;
+  private lastTriggered: Record<string, string> = {};
+
+  constructor(initialConfig?: Partial<ProactiveTriggerConfig>) {
+    this.config = {
+      morningChai: {
+        enabled: initialConfig?.morningChai?.enabled ?? true,
+        time: initialConfig?.morningChai?.time ?? "08:00",
+        activeWindow: initialConfig?.morningChai?.activeWindow ?? {
+          start: "07:30",
+          end: "10:30",
+          timezone: "user",
+        },
+      },
+      eveningUnwind: {
+        enabled: initialConfig?.eveningUnwind?.enabled ?? true,
+        time: initialConfig?.eveningUnwind?.time ?? "21:00",
+        activeWindow: initialConfig?.eveningUnwind?.activeWindow ?? {
+          start: "20:30",
+          end: "23:30",
+          timezone: "user",
+        },
+      },
+      timezone: initialConfig?.timezone ?? "local",
+    };
+  }
+
+  public getConfig(): ProactiveTriggerConfig {
+    return JSON.parse(JSON.stringify(this.config));
+  }
+
+  public updateConfig(updates: Partial<ProactiveTriggerConfig>): ProactiveTriggerConfig {
+    if (updates.morningChai) {
+      this.config.morningChai = { ...this.config.morningChai, ...updates.morningChai };
+    }
+    if (updates.eveningUnwind) {
+      this.config.eveningUnwind = { ...this.config.eveningUnwind, ...updates.eveningUnwind };
+    }
+    if (updates.timezone) {
+      this.config.timezone = updates.timezone;
+    }
+    return this.getConfig();
+  }
+
+  public isWindowActive(type: "morning_chai" | "evening_unwind", nowMs: number = Date.now()): boolean {
+    const window = type === "morning_chai" ? this.config.morningChai.activeWindow : this.config.eveningUnwind.activeWindow;
+    return isCronWithinActiveHours(window, nowMs, this.config.timezone);
+  }
+
+  public generateBriefing(
+    type: "morning_chai" | "evening_unwind",
+    data?: { tasks?: string[]; calendar?: string[]; accomplishments?: string[]; deeds?: string[] },
+    companionName: string = "Saan"
+  ): { type: string; formatted: string; timestamp: string } {
+    const timestamp = new Date().toISOString();
+    this.lastTriggered[type] = timestamp;
+
+    if (type === "morning_chai") {
+      const defaultTasks = data?.tasks || [
+        "Finalize cognitive memory architecture upgrade",
+        "Verify Next.js 16 zero-regression build pipeline",
+      ];
+      const defaultCal = data?.calendar || [
+        "10:00 AM: Deep focus autonomous agent check-in",
+        "03:00 PM: Milestone verification review",
+      ];
+      return {
+        type: "morning_chai",
+        formatted: generateMorningChaiBriefing(defaultTasks, defaultCal, companionName),
+        timestamp,
+      };
+    } else {
+      const defaultAcc = data?.accomplishments || [
+        "20 Companion repositories fully audited, tested, and synchronized",
+        "Clean-room TypeScript & Next.js routes 100% compiled",
+      ];
+      const defaultDeeds = data?.deeds || [
+        "Maintained unbreakable sovereign local privacy",
+        "Shared reflective discussion during evening work",
+      ];
+      return {
+        type: "evening_unwind",
+        formatted: generateEveningUnwindRecap(defaultAcc, defaultDeeds, companionName),
+        timestamp,
+      };
+    }
+  }
+}
+
+let globalProactiveManager: ProactiveTriggerManager | null = null;
+
+export function getProactiveTriggerManager(): ProactiveTriggerManager {
+  if (!globalProactiveManager) {
+    globalProactiveManager = new ProactiveTriggerManager();
+  }
+  return globalProactiveManager;
+}
+

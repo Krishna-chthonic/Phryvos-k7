@@ -77,6 +77,7 @@ import {
 import { getWorkingScratchpadManager } from "@/lib/saan/working-scratchpad";
 import { getObservableActionStream } from "@/lib/saan/observable-action-stream";
 import { DirtyJsonRepairEngine, getDirtyJsonRepairAuditor } from "@/lib/saan/dirty-json-repair";
+import { getProactiveTriggerManager } from "@/lib/saan/trigger-recall";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -497,6 +498,29 @@ export async function POST(req: NextRequest) {
       const auditor = getDirtyJsonRepairAuditor();
       auditor.clear();
       return NextResponse.json({ ok: true });
+    }
+
+    // TriggerRecall & Proactive Briefing Engine Endpoints
+    if (body.type === "get_proactive_config") {
+      const mgr = getProactiveTriggerManager();
+      return NextResponse.json({ ok: true, config: mgr.getConfig() });
+    }
+
+    if (body.type === "update_proactive_config" && body.config) {
+      const mgr = getProactiveTriggerManager();
+      const updated = mgr.updateConfig(body.config);
+      return NextResponse.json({ ok: true, config: updated });
+    }
+
+    if (body.type === "preview_proactive_briefing" && body.briefingType) {
+      const mgr = getProactiveTriggerManager();
+      const briefing = mgr.generateBriefing(
+        body.briefingType as "morning_chai" | "evening_unwind",
+        body.data,
+        body.companionName || "Saan"
+      );
+      const isActive = mgr.isWindowActive(body.briefingType as "morning_chai" | "evening_unwind");
+      return NextResponse.json({ ok: true, briefing, isActive });
     }
 
     const rawUserMessage = body.message;

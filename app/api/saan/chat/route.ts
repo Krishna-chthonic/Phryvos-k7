@@ -20,6 +20,7 @@ import {
   globalAssociativeNetwork,
   globalLeaseManager,
   globalResearchPlanner,
+  globalGateManager,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -640,6 +641,41 @@ export async function POST(req: NextRequest) {
         ok: true,
         run,
         history: globalResearchPlanner.getWorkflowHistory(),
+      });
+    }
+
+    // Smolagents / OpenInterpreter Interactive Confirmation Gate (Repo #26) Endpoints
+    if (body.type === "get_gate_approvals") {
+      return NextResponse.json({
+        ok: true,
+        pending: globalGateManager.getPendingApprovals(),
+        auditHistory: globalGateManager.getAuditHistory(),
+        sessionAuthorizations: globalGateManager.getSessionAuthorizations(),
+      });
+    }
+
+    if (body.type === "submit_gate_decision" && body.cardId && body.decision) {
+      const resolution = globalGateManager.resolveApproval(body.cardId, body.decision);
+      return NextResponse.json({
+        ok: true,
+        ...resolution,
+        pending: globalGateManager.getPendingApprovals(),
+        auditHistory: globalGateManager.getAuditHistory(),
+        sessionAuthorizations: globalGateManager.getSessionAuthorizations(),
+      });
+    }
+
+    if (body.type === "create_gate_request" && body.command) {
+      const card = globalGateManager.createApprovalCard(body.command, {
+        securityTier: body.securityTier || 2,
+        sandboxMode: body.sandboxMode || "workspace-write",
+        workingDirectory: body.workingDirectory,
+        requiredPermissions: body.requiredPermissions,
+      });
+      return NextResponse.json({
+        ok: true,
+        card,
+        pending: globalGateManager.getPendingApprovals(),
       });
     }
 

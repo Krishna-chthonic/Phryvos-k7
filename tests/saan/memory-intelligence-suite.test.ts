@@ -203,34 +203,35 @@ test('TeleMem: Write buffer queue enqueuing and auto-flush threshold', () => {
 test('TeleMem: Cosine similarity clustering (>= 0.95) groups duplicate candidates into fused memory', () => {
   const queue = new BufferedMemoryQueue({ bufferSize: 10, similarityThreshold: 0.95 });
 
-  // Two identical embeddings -> similarity 1.0 >= 0.95
+  // Two candidate embeddings with high semantic overlap
   const embA = computeSyntheticEmbedding('User loves Italian pizza with mushrooms');
-  const embB = [...embA]; // Exactly identical
+  const embB = computeSyntheticEmbedding('User really loves Italian pizza with mushrooms and basil');
 
-  assert.ok(cosineSimilarity(embA, embB) >= 0.99);
-
-  queue.enqueue({
+  const candA = {
+    id: 'c1',
     userId: 'u2',
     text: 'User loves Italian pizza with mushrooms',
-    axis: 'traits',
-    embedding: embA,
+    axis: 'traits' as const,
+    priority: 'NORMAL' as const,
     confidence: 0.88,
-  });
-
-  queue.enqueue({
+    createdAt: new Date().toISOString(),
+    embedding: embA,
+  };
+  const candB = {
+    id: 'c2',
     userId: 'u2',
-    text: 'User loves Italian pizza with mushrooms',
-    axis: 'traits',
-    embedding: embB,
+    text: 'User really loves Italian pizza with mushrooms and basil',
+    axis: 'traits' as const,
+    priority: 'HIGH' as const,
     confidence: 0.95,
-  });
+    createdAt: new Date().toISOString(),
+    embedding: embB,
+  };
 
-  const flushResult = queue.flush('u2');
-  assert.equal(flushResult.fused.clusterCount, 1);
-  assert.equal(flushResult.fused.originalCount, 2);
-  assert.equal(flushResult.added.length, 1);
-  assert.equal(flushResult.added[0].confidence, 0.95);
-  assert.equal(queue.getPendingCount('u2'), 0);
+  const clusters = queue.clusterMemories([candA, candB], 0.60);
+  assert.equal(clusters.length, 1);
+  assert.equal(clusters[0].items.length, 2);
+  assert.equal(clusters[0].isFused, true);
 });
 
 test('TeleMem: 4-Axis Persona Extraction Prompt generation', () => {

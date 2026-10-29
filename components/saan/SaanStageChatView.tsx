@@ -45,6 +45,7 @@ import {
   Workflow,
   Lock,
   Compass,
+  ShieldAlert,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -62,6 +63,7 @@ import { SaanMemoryEvalJudgeModal } from "./SaanMemoryEvalJudgeModal";
 import { SaanAssociativeNetworkModal } from "./SaanAssociativeNetworkModal";
 import { SaanStateLeaseModal } from "./SaanStateLeaseModal";
 import { SaanResearchWorkflowModal } from "./SaanResearchWorkflowModal";
+import { SaanConfirmationGateModal } from "./SaanConfirmationGateModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -207,6 +209,10 @@ export function SaanStageChatView({
 
   // LangGraph Cyclic Research Workflow State
   const [isResearchWorkflowOpen, setIsResearchWorkflowOpen] = React.useState(false);
+
+  // Smolagents Interactive Confirmation Gate State
+  const [isGateModalOpen, setIsGateModalOpen] = React.useState(false);
+  const [pendingGateCount, setPendingGateCount] = React.useState(2);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1387,6 +1393,22 @@ export function SaanStageChatView({
                 <Compass className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Planner</span>
               </button>
+
+              {/* Smolagents: Interactive Confirmation Gate Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsGateModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Inspect 3-Tier Interactive Confirmation Gate & Sandboxed Execution (Smolagents Engine)"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+                <span>ConfGate</span>
+                {pendingGateCount > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    {pendingGateCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2216,6 +2238,13 @@ export function SaanStageChatView({
       <SaanResearchWorkflowModal
         isOpen={isResearchWorkflowOpen}
         onClose={() => setIsResearchWorkflowOpen(false)}
+      />
+
+      {/* Smolagents Interactive Confirmation Gate Modal */}
+      <SaanConfirmationGateModal
+        isOpen={isGateModalOpen}
+        onClose={() => setIsGateModalOpen(false)}
+        onPendingCountChange={(cnt) => setPendingGateCount(cnt)}
       />
     </div>
   );

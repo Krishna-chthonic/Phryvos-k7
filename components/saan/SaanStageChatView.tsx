@@ -50,6 +50,7 @@ import {
   Globe,
   Target,
   EyeOff,
+  Cpu,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -75,6 +76,7 @@ import { SaanCleanMarkdownModal } from "./SaanCleanMarkdownModal";
 import { SaanSecurityFenceModal } from "./SaanSecurityFenceModal";
 import { SaanAccessibilityTreeModal } from "./SaanAccessibilityTreeModal";
 import { SaanStealthHeadersModal } from "./SaanStealthHeadersModal";
+import { SaanMcpExplorerModal } from "./SaanMcpExplorerModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -248,6 +250,9 @@ export function SaanStageChatView({
 
   // Playwright Stealth Anti-Bot Headers State
   const [isStealthModalOpen, setIsStealthModalOpen] = React.useState(false);
+
+  // Model Context Protocol (MCP 2.x) Bridge State
+  const [isMcpModalOpen, setIsMcpModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1536,6 +1541,17 @@ export function SaanStageChatView({
                 <EyeOff className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Stealth</span>
               </button>
+
+              {/* MCP: Model Context Protocol 2.x JSON-RPC Explorer Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsMcpModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-violet-950/40 text-violet-300 border border-zinc-800 hover:border-violet-500/40 transition cursor-pointer"
+                title="Inspect Anthropic Model Context Protocol (MCP 2.x) JSON-RPC Bridge (Repo #35)"
+              >
+                <Cpu className="w-3.5 h-3.5 text-violet-400" />
+                <span>MCP</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2417,6 +2433,12 @@ export function SaanStageChatView({
       <SaanStealthHeadersModal
         isOpen={isStealthModalOpen}
         onClose={() => setIsStealthModalOpen(false)}
+      />
+
+      {/* Model Context Protocol (MCP 2.x) Bridge Modal */}
+      <SaanMcpExplorerModal
+        isOpen={isMcpModalOpen}
+        onClose={() => setIsMcpModalOpen(false)}
       />
     </div>
   );

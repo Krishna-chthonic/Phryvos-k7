@@ -30,6 +30,7 @@ import {
   globalWebSecurityAuditor,
   globalAccessibilityParser,
   globalStealthGenerator,
+  globalMcpBridge,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import { checkCrisisSignals } from "@/lib/saan/safety";
@@ -889,6 +890,35 @@ export async function POST(req: NextRequest) {
         preset,
         profile,
         headers,
+      });
+    }
+
+    // Model Context Protocol (MCP 2.x) JSON-RPC Bridge (Repo #35) Endpoints
+    if (body.type === "get_mcp_overview") {
+      const [initRes, toolsRes, resRes, promptsRes] = await Promise.all([
+        globalMcpBridge.handleMessage({ jsonrpc: "2.0", id: "init", method: "initialize" }),
+        globalMcpBridge.handleMessage({ jsonrpc: "2.0", id: "tools", method: "tools/list" }),
+        globalMcpBridge.handleMessage({ jsonrpc: "2.0", id: "resources", method: "resources/list" }),
+        globalMcpBridge.handleMessage({ jsonrpc: "2.0", id: "prompts", method: "prompts/list" }),
+      ]);
+
+      return NextResponse.json({
+        ok: true,
+        serverInfo: initRes?.result?.serverInfo,
+        protocolVersion: initRes?.result?.protocolVersion,
+        capabilities: initRes?.result?.capabilities,
+        tools: toolsRes?.result?.tools || [],
+        resources: resRes?.result?.resources || [],
+        prompts: promptsRes?.result?.prompts || [],
+      });
+    }
+
+    if (body.type === "dispatch_mcp_jsonrpc" && body.request) {
+      const response = await globalMcpBridge.handleMessage(body.request);
+      return NextResponse.json({
+        ok: true,
+        request: body.request,
+        response,
       });
     }
 

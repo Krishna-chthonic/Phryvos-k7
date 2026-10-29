@@ -31,8 +31,10 @@ import {
   User,
   AlertTriangle,
   GitBranch,
+  Layers,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
+import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -132,6 +134,9 @@ export function SaanStageChatView({
 
   // Graphiti Bi-Temporal Graph State
   const [isGraphitiOpen, setIsGraphitiOpen] = React.useState(false);
+
+  // Cognee Cognify Multi-Stage Pipeline State
+  const [isCognifyOpen, setIsCognifyOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1147,6 +1152,17 @@ export function SaanStageChatView({
                 <GitBranch className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Graphiti</span>
               </button>
+
+              {/* Cognee: Cognify Multi-Stage Pipeline & Rollback Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsCognifyOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
+                title="Inspect Cognee Multi-Stage Cognify Pipeline & Atomic Rollback Engine"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>Cognify</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1861,6 +1877,12 @@ export function SaanStageChatView({
       <SaanTemporalGraphModal
         isOpen={isGraphitiOpen}
         onClose={() => setIsGraphitiOpen(false)}
+      />
+
+      {/* Cognee Cognify Multi-Stage Pipeline Modal */}
+      <SaanCognifyPipelineModal
+        isOpen={isCognifyOpen}
+        onClose={() => setIsCognifyOpen(false)}
       />
     </div>
   );

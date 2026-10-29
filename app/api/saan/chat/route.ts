@@ -58,6 +58,7 @@ import { globalChatVariables } from "@/lib/saan/chat-variables";
 import { getCoreMemoryManager } from "@/lib/saan/core-memory-blocks";
 import { getMem0AuditLog } from "@/lib/saan/mem0-decision-matrix";
 import { getTemporalEdgeGraphStore } from "@/lib/saan/temporal-edge-graph";
+import { getCognifyPipelineManager } from "@/lib/saan/cognify-pipeline";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -181,6 +182,19 @@ export async function POST(req: NextRequest) {
         supersededEdgeIds: res.supersededEdgeIds,
         graph: store.getSnapshot(),
       });
+    }
+
+    // Cognee Cognify Multi-Stage Pipeline
+    if (body.type === "get_cognify_status") {
+      const manager = getCognifyPipelineManager();
+      return NextResponse.json({ ok: true, history: manager.getHistory() });
+    }
+    if (body.type === "run_cognify_pipeline" && body.text) {
+      const manager = getCognifyPipelineManager();
+      const report = await manager.cognifyText(body.text, {
+        simulateFailureStage: body.simulateFailureStage,
+      });
+      return NextResponse.json({ ok: true, report, history: manager.getHistory() });
     }
 
     const rawUserMessage = body.message;

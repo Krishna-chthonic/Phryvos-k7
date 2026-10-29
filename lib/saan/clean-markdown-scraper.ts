@@ -275,3 +275,91 @@ export class CleanMarkdownScraper {
     }
   }
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scraped Document Store & Reader Simulation (Repo #31: Firecrawl)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ScrapedArticleRecord {
+  id: string;
+  url: string;
+  title: string;
+  markdown: string;
+  metadata: ScrapedPageMetadata;
+  extractedLinksCount: number;
+  extractedImagesCount: number;
+  scrapedAt: string;
+}
+
+export class FirecrawlDocumentStore {
+  private articles: ScrapedArticleRecord[] = [];
+
+  constructor() {
+    this.seedDefaultArticle();
+  }
+
+  private seedDefaultArticle(): void {
+    if (this.articles.length === 0) {
+      this.articles.push({
+        id: "art-nextjs-rsc",
+        url: "https://nextjs.org/blog/next-16-architecture",
+        title: "Next.js 16 Architecture & Server Components",
+        markdown: `# Next.js 16 Architecture & Server Components
+
+Next.js 16 introduces foundational improvements to compilation speed and server-client streaming boundaries.
+
+## Key Capabilities
+- React Server Actions with optimistic rollbacks
+- Zero-bundle client components
+- Monotonic PTS audio streaming pipelines
+
+### Benchmark Comparison
+| Engine | Cold Start (ms) | Memory (MB) |
+| --- | --- | --- |
+| Next.js 16 | 42 | 128 |
+| Node.js Standard | 110 | 256 |
+
+> Sovereign private execution guarantees zero cloud telemetry leakage.`,
+        metadata: {
+          title: "Next.js 16 Architecture & Server Components",
+          description: "Deep architectural guide to Next.js 16 streaming mechanics",
+          canonicalUrl: "https://nextjs.org/blog/next-16-architecture",
+          author: "Vercel Core Team",
+        },
+        extractedLinksCount: 14,
+        extractedImagesCount: 2,
+        scrapedAt: new Date().toISOString(),
+      });
+    }
+  }
+
+  public recordArticle(url: string, result: CleanMarkdownResult): ScrapedArticleRecord {
+    const record: ScrapedArticleRecord = {
+      id: `art-${Math.random().toString(36).slice(2, 8)}`,
+      url,
+      title: result.metadata.title || "Untitled Scraped Document",
+      markdown: result.markdown,
+      metadata: result.metadata,
+      extractedLinksCount: result.extractedLinks.length,
+      extractedImagesCount: result.extractedImages.length,
+      scrapedAt: new Date().toISOString(),
+    };
+
+    this.articles.unshift(record);
+    if (this.articles.length > 25) {
+      this.articles.pop();
+    }
+    return record;
+  }
+
+  public getArticles(): ScrapedArticleRecord[] {
+    return [...this.articles];
+  }
+
+  public getArticleById(id: string): ScrapedArticleRecord | undefined {
+    return this.articles.find((a) => a.id === id);
+  }
+}
+
+export const globalFirecrawlStore = new FirecrawlDocumentStore();

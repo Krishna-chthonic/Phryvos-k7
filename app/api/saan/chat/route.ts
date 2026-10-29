@@ -24,6 +24,8 @@ import {
   globalIdempotencyEngine,
   globalLifecycleHookManager,
   globalMetasearchAggregator,
+  globalFirecrawlStore,
+  globalMarkdownScraper,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -758,6 +760,47 @@ export async function POST(req: NextRequest) {
         ok: true,
         ...simulation,
         history: globalMetasearchAggregator.getSearchHistory(),
+      });
+    }
+
+    // Firecrawl Clean Markdown Scraper (Repo #31) Endpoints
+    if (body.type === "get_scraped_articles") {
+      return NextResponse.json({
+        ok: true,
+        articles: globalFirecrawlStore.getArticles(),
+      });
+    }
+
+    if (body.type === "scrape_webpage_clean") {
+      const targetUrl = body.url || "https://example.com/article";
+      const sampleHtml = body.html || `
+        <html>
+          <head><title>${body.title || "Clean Reader Document"}</title><meta name="description" content="Extracted via Firecrawl clean reader"/></head>
+          <body>
+            <header><nav><a href="/">Home</a></nav></header>
+            <div id="onetrust-consent-sdk"><p>Accept Cookies</p></div>
+            <main>
+              <h1>${body.title || "Clean Reader Document"}</h1>
+              <p>This web document was processed by Firecrawl clean reader. All navigation, consent banners, and tracking scripts were eliminated.</p>
+              <blockquote>Sovereign privacy guarantees clean, untracked reading.</blockquote>
+              <table><tr><th>Feature</th><th>Status</th></tr><tr><td>Boilerplate Scrubbing</td><td>Active</td></tr></table>
+            </main>
+            <footer><p>© 2026 Example Corp</p></footer>
+          </body>
+        </html>
+      `;
+
+      const cleanResult = globalMarkdownScraper.cleanAndConvert(sampleHtml, {
+        baseUrl: targetUrl,
+        onlyMainContent: true,
+      });
+
+      const record = globalFirecrawlStore.recordArticle(targetUrl, cleanResult);
+
+      return NextResponse.json({
+        ok: true,
+        article: record,
+        articles: globalFirecrawlStore.getArticles(),
       });
     }
 

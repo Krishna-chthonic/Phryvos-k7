@@ -21,6 +21,7 @@ import {
   globalLeaseManager,
   globalResearchPlanner,
   globalGateManager,
+  globalIdempotencyEngine,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -676,6 +677,40 @@ export async function POST(req: NextRequest) {
         ok: true,
         card,
         pending: globalGateManager.getPendingApprovals(),
+      });
+    }
+
+    // AutoGen & n8n Idempotency Backoff & Retry Telemetry (Repo #27) Endpoints
+    if (body.type === "get_retry_telemetry") {
+      return NextResponse.json({
+        ok: true,
+        telemetry: globalIdempotencyEngine.getTelemetry(),
+        deadLetters: globalIdempotencyEngine.getDeadLetters(),
+        records: globalIdempotencyEngine.getAllRecords(),
+      });
+    }
+
+    if (body.type === "reprocess_dead_letter" && body.id) {
+      const success = globalIdempotencyEngine.reprocessDeadLetter(body.id);
+      return NextResponse.json({
+        ok: success,
+        telemetry: globalIdempotencyEngine.getTelemetry(),
+        deadLetters: globalIdempotencyEngine.getDeadLetters(),
+      });
+    }
+
+    if (body.type === "simulate_retry_execution") {
+      const sim = globalIdempotencyEngine.simulateExecutionWithRetry(
+        body.fnName || "sync_knowledge_vector",
+        body.payload || { test: true },
+        body.failAttempts ?? 2
+      );
+      return NextResponse.json({
+        ok: true,
+        sim,
+        telemetry: globalIdempotencyEngine.getTelemetry(),
+        deadLetters: globalIdempotencyEngine.getDeadLetters(),
+        records: globalIdempotencyEngine.getAllRecords(),
       });
     }
 

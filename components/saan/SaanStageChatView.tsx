@@ -64,6 +64,7 @@ import { SaanAssociativeNetworkModal } from "./SaanAssociativeNetworkModal";
 import { SaanStateLeaseModal } from "./SaanStateLeaseModal";
 import { SaanResearchWorkflowModal } from "./SaanResearchWorkflowModal";
 import { SaanConfirmationGateModal } from "./SaanConfirmationGateModal";
+import { SaanRetryTelemetryModal } from "./SaanRetryTelemetryModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -213,6 +214,10 @@ export function SaanStageChatView({
   // Smolagents Interactive Confirmation Gate State
   const [isGateModalOpen, setIsGateModalOpen] = React.useState(false);
   const [pendingGateCount, setPendingGateCount] = React.useState(2);
+
+  // AutoGen Resilient Retry & Idempotency Telemetry State
+  const [isRetryTelemetryOpen, setIsRetryTelemetryOpen] = React.useState(false);
+  const [activeRetryCount, setActiveRetryCount] = React.useState(2);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1409,6 +1414,22 @@ export function SaanStageChatView({
                   </span>
                 )}
               </button>
+
+              {/* AutoGen: Idempotency Backoff Retry Telemetry Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsRetryTelemetryOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-cyan-950/40 text-cyan-300 border border-zinc-800 hover:border-cyan-500/40 transition cursor-pointer"
+                title="Inspect AutoGen & n8n Idempotency Backoff, DLQ & Latency Telemetry"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Backoff</span>
+                {activeRetryCount > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    {activeRetryCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2245,6 +2266,13 @@ export function SaanStageChatView({
         isOpen={isGateModalOpen}
         onClose={() => setIsGateModalOpen(false)}
         onPendingCountChange={(cnt) => setPendingGateCount(cnt)}
+      />
+
+      {/* AutoGen Resilient Retry & Idempotency Telemetry Modal */}
+      <SaanRetryTelemetryModal
+        isOpen={isRetryTelemetryOpen}
+        onClose={() => setIsRetryTelemetryOpen(false)}
+        onActiveRetriesChange={(cnt) => setActiveRetryCount(cnt)}
       />
     </div>
   );

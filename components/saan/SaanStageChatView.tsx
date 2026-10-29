@@ -34,11 +34,13 @@ import {
   Layers,
   Briefcase,
   Clock,
+  BookOpen,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
 import { SaanHindsightBudgetModal } from "./SaanHindsightBudgetModal";
 import { SaanTimeTravelScrubberModal } from "./SaanTimeTravelScrubberModal";
+import { SaanIncrementalSummaryModal } from "./SaanIncrementalSummaryModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -147,6 +149,9 @@ export function SaanStageChatView({
 
   // Datapace Time-Travel Scrubber State
   const [isTimeTravelOpen, setIsTimeTravelOpen] = React.useState(false);
+
+  // Zep Incremental Summary State
+  const [isSummaryOpen, setIsSummaryOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1195,6 +1200,17 @@ export function SaanStageChatView({
                 <Clock className="w-3.5 h-3.5 text-sky-400" />
                 <span>Scrubber</span>
               </button>
+
+              {/* Zep: Incremental Conversation Summary & Entity Tags Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsSummaryOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-indigo-950/40 text-indigo-300 border border-zinc-800 hover:border-indigo-500/40 transition cursor-pointer"
+                title="Inspect Incremental Conversation Summary & Entity Tags (Zep / LangMem Engine)"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Summary</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -1927,6 +1943,12 @@ export function SaanStageChatView({
       <SaanTimeTravelScrubberModal
         isOpen={isTimeTravelOpen}
         onClose={() => setIsTimeTravelOpen(false)}
+      />
+
+      {/* Zep / LangMem Incremental Summary Modal */}
+      <SaanIncrementalSummaryModal
+        isOpen={isSummaryOpen}
+        onClose={() => setIsSummaryOpen(false)}
       />
     </div>
   );

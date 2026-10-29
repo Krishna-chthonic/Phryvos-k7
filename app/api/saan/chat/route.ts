@@ -65,6 +65,7 @@ import {
   getCausalMemoryRegistry,
 } from "@/lib/saan/temporal-query-engine";
 import { reconstructPointInTimeState } from "@/lib/saan/memory-benchmark-bitemporal";
+import { getGlobalIncrementalSummaryManager } from "@/lib/saan/incremental-summary";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -229,6 +230,19 @@ export async function POST(req: NextRequest) {
       const asOf = body.asOfTimestamp ? Number(body.asOfTimestamp) : undefined;
       const state = reconstructPointInTimeState(asOf);
       return NextResponse.json({ ok: true, state });
+    }
+
+    // Zep / LangMem Incremental Conversation Summarization & Entity Tags
+    if (body.type === "get_incremental_summary") {
+      const summaryMgr = getGlobalIncrementalSummaryManager();
+      const currentTokens = body.currentTokens ? Number(body.currentTokens) : 2400;
+      return NextResponse.json({ ok: true, snapshot: summaryMgr.getSnapshot(currentTokens) });
+    }
+    if (body.type === "trigger_incremental_summary" && body.newText) {
+      const summaryMgr = getGlobalIncrementalSummaryManager();
+      const newIds = body.messageIds || [`msg_${Date.now()}`];
+      summaryMgr.updateRunningSummary(body.newText, newIds);
+      return NextResponse.json({ ok: true, snapshot: summaryMgr.getSnapshot() });
     }
 
     const rawUserMessage = body.message;

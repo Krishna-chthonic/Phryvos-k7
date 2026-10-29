@@ -6,6 +6,7 @@
  *    lastSummarizedMessageId tracking, and atomic tool call message pairing.
  * 2. MemGPT (`cpacker/MemGPT`): 75% context warning trigger (MESSAGE_SUMMARY_WARNING_FRAC),
  *    preserve last N messages (MESSAGE_SUMMARY_TRUNC_KEEP_N_LAST = 3), and disallowToolAsFirst invariant.
+ * 3. Zep (`getzep/zep`): Incremental summary fold-in, extracted named entity tags with confidence.
  */
 
 export interface MessagePayload {
@@ -45,6 +46,28 @@ export interface SummarizationEvaluation {
   currentTokens: number;
 }
 
+export interface EntityTag {
+  name: string;
+  category: "person" | "concept" | "place" | "preference" | "schedule";
+  confidence: number;
+  occurrences: number;
+}
+
+export interface IncrementalSummarySnapshot {
+  summary: string;
+  summarizedMessageCount: number;
+  lastSummarizedId: string | null;
+  updatedAt: string;
+  entityTags: EntityTag[];
+  contextPressure: {
+    warningFraction: number;
+    currentTokens: number;
+    maxContextTokens: number;
+    pressurePercent: number;
+    isWarningTriggered: boolean;
+  };
+}
+
 export const MEMGPT_SUMMARY_WARNING =
   '[This is an automated system message hidden from the user] The conversation history will soon reach its maximum length and be trimmed. ' +
   'Do NOT tell the user about this system alert, they should not know that the history is reaching max length. ' +
@@ -70,6 +93,39 @@ export function countMessageTokens(
     }
   }
   return count;
+}
+
+/**
+ * Extracts named entity tags with confidence and occurrence metrics.
+ */
+export function extractEntityTagsFromText(text: string): EntityTag[] {
+  const t = text.toLowerCase();
+  const tags: EntityTag[] = [];
+
+  const candidates: Array<{ name: string; category: EntityTag["category"]; regex: RegExp; conf: number }> = [
+    { name: "User (Krishna)", category: "person", regex: /\b(user|krishna|mera naam)\b/i, conf: 0.98 },
+    { name: "Saan", category: "person", regex: /\b(saan)\b/i, conf: 0.99 },
+    { name: "Ginger Chai", category: "preference", regex: /\b(chai|tea|adrak)\b/i, conf: 0.95 },
+    { name: "Jaipur", category: "place", regex: /\b(jaipur|pink city)\b/i, conf: 0.92 },
+    { name: "Bengaluru", category: "place", regex: /\b(bengaluru|bangalore)\b/i, conf: 0.90 },
+    { name: "Deep Work Sprint", category: "schedule", regex: /\b(work|deep work|focus|study)\b/i, conf: 0.94 },
+    { name: "Sovereign Privacy", category: "concept", regex: /\b(privacy|sovereign|local|vault)\b/i, conf: 0.96 },
+    { name: "Exams & Goals", category: "schedule", regex: /\b(exam|goal|target|milestone)\b/i, conf: 0.88 },
+  ];
+
+  for (const c of candidates) {
+    const matches = text.match(new RegExp(c.regex.source, "gi"));
+    if (matches && matches.length > 0) {
+      tags.push({
+        name: c.name,
+        category: c.category,
+        confidence: c.conf,
+        occurrences: matches.length,
+      });
+    }
+  }
+
+  return tags;
 }
 
 export class IncrementalSummaryManager {
@@ -249,4 +305,55 @@ export class IncrementalSummaryManager {
 
     return { systemPrompt, userPrompt };
   }
+
+  /**
+   * Returns complete snapshot with entity tags and context pressure metrics.
+   */
+  public getSnapshot(currentTokens = 2400): IncrementalSummarySnapshot {
+    const entityTags = extractEntityTagsFromText(this.state.summary);
+    const pressurePct = Math.min(100, Math.round((currentTokens / this.config.maxContextTokens) * 100));
+    const isWarningTriggered = currentTokens >= this.config.maxContextTokens * this.config.warningFraction;
+
+    return {
+      summary: this.state.summary,
+      summarizedMessageCount: this.state.summarizedMessageIds.length,
+      lastSummarizedId: this.state.lastSummarizedMessageId,
+      updatedAt: this.state.updatedAt,
+      entityTags,
+      contextPressure: {
+        warningFraction: this.config.warningFraction,
+        currentTokens,
+        maxContextTokens: this.config.maxContextTokens,
+        pressurePercent: pressurePct,
+        isWarningTriggered,
+      },
+    };
+  }
+}
+
+// Global Singleton for Saan
+let globalSummaryManagerInstance: IncrementalSummaryManager | null = null;
+
+export function getGlobalIncrementalSummaryManager(): IncrementalSummaryManager {
+  if (!globalSummaryManagerInstance) {
+    globalSummaryManagerInstance = new IncrementalSummaryManager(
+      {
+        maxContextTokens: 8192,
+        warningFraction: 0.75,
+        truncationFraction: 0.75,
+        keepNLast: 3,
+        maxSummaryTokens: 300,
+      },
+      {
+        summary:
+          "Conversational Genesis: Krishna and Saan established companion connection. " +
+          "User shared preference for morning ginger chai and afternoon deep focus sprints in Jaipur. " +
+          "Saan committed to sovereign zero-cloud privacy and empathetic daily check-ins.",
+        summarizedMessageIds: ["msg_gen_01", "msg_gen_02", "msg_gen_03"],
+        lastSummarizedMessageId: "msg_gen_03",
+        updatedAt: new Date(Date.now() - 86400000).toISOString(),
+      }
+    );
+  }
+  return globalSummaryManagerInstance;
 }

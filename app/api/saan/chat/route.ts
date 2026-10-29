@@ -68,6 +68,12 @@ import { reconstructPointInTimeState } from "@/lib/saan/memory-benchmark-bitempo
 import { getGlobalIncrementalSummaryManager } from "@/lib/saan/incremental-summary";
 import { getGlobalMemobaseProfileStore, MemobaseProfileManager } from "@/lib/saan/profile-extractor";
 import { getBufferedMemoryQueue, type MemoryPriority } from "@/lib/saan/buffered-memory-queue";
+import {
+  GnosysMemoryPortabilityEngine,
+  type MergeStrategy,
+  type GnosysMemoryFact,
+  type GnosysMemoryEdge,
+} from "@/lib/saan/portable-memory-spec";
 import { requireVault } from "@/server/vault-guard";
 import { defaultProvider, createLlmClient } from "@/lib/providers-service";
 
@@ -289,6 +295,118 @@ export async function POST(req: NextRequest) {
       const q = getBufferedMemoryQueue();
       const flushResult = q.flush("user");
       return NextResponse.json({ ok: true, flushResult, metrics: q.getQueueMetrics("user") });
+    }
+
+    // Gnosys & Dify Portable Memory Interchange Endpoints
+    if (body.type === "export_memory_snapshot") {
+      const coreMgr = getCoreMemoryManager();
+      const personaBlock = coreMgr.getBlock("persona");
+      const humanBlock = coreMgr.getBlock("human");
+      const rawMemories = getSaanMemories(50);
+      const facts: GnosysMemoryFact[] = rawMemories.map((m: any, idx: number) => ({
+        id: `fact_${m.id || idx + 1}`,
+        category: (m.category || "personal") as any,
+        fact: m.fact || m.text || "",
+        confidence: m.confidence ?? 0.9,
+        validAt: m.valid_since || m.created_at || new Date().toISOString(),
+        invalidAt: m.valid_until,
+      }));
+
+      const graphStore = getTemporalEdgeGraphStore();
+      const edges: GnosysMemoryEdge[] = graphStore.getActiveEdgesAsOf(Date.now()).map((e) => ({
+        source: e.sourceNode,
+        target: e.targetNode,
+        relationship: e.relation,
+        weight: 1.0,
+        validAt: new Date(e.validAt).toISOString(),
+        invalidAt: e.invalidAt ? new Date(e.invalidAt).toISOString() : undefined,
+      }));
+
+      const snapshot = GnosysMemoryPortabilityEngine.exportSnapshot({
+        agentId: "saan-k7",
+        coreMemory: {
+          persona: personaBlock?.content || "",
+          human: humanBlock?.content || "",
+          maxPersonaLength: 2500,
+          maxHumanLength: 2500,
+        },
+        facts,
+        edges,
+        metadata: {
+          environment: "k7-sovereign",
+          version: "1.0.0",
+        },
+      });
+
+      const difyDataset = GnosysMemoryPortabilityEngine.toDifyDataset(snapshot);
+
+      return NextResponse.json({ ok: true, snapshot, difyDataset });
+    }
+
+    if (body.type === "validate_memory_snapshot" && body.snapshot) {
+      const validation = GnosysMemoryPortabilityEngine.validateAndImport(body.snapshot);
+      return NextResponse.json({ ok: true, validation });
+    }
+
+    if (body.type === "import_memory_snapshot" && body.snapshot) {
+      const validation = GnosysMemoryPortabilityEngine.validateAndImport(body.snapshot);
+      if (!validation.valid) {
+        return NextResponse.json({ ok: false, error: validation.error }, { status: 400 });
+      }
+
+      const incoming = typeof body.snapshot === "string" ? JSON.parse(body.snapshot) : body.snapshot;
+      const strategy: MergeStrategy = body.strategy || "UNION";
+
+      const coreMgr = getCoreMemoryManager();
+      const existingPersona = coreMgr.getBlock("persona")?.content || "";
+      const existingHuman = coreMgr.getBlock("human")?.content || "";
+      const rawMemories = getSaanMemories(50);
+      const existingFacts: GnosysMemoryFact[] = rawMemories.map((m: any, idx: number) => ({
+        id: `fact_${m.id || idx + 1}`,
+        category: (m.category || "personal") as any,
+        fact: m.fact || m.text || "",
+        confidence: m.confidence ?? 0.9,
+        validAt: m.valid_since || m.created_at || new Date().toISOString(),
+      }));
+
+      const graphStore = getTemporalEdgeGraphStore();
+      const existingEdges: GnosysMemoryEdge[] = graphStore.getActiveEdgesAsOf(Date.now()).map((e) => ({
+        source: e.sourceNode,
+        target: e.targetNode,
+        relationship: e.relation,
+        weight: 1.0,
+        validAt: new Date(e.validAt).toISOString(),
+      }));
+
+      const mergeResult = GnosysMemoryPortabilityEngine.mergeSnapshot(
+        {
+          coreMemory: { persona: existingPersona, human: existingHuman },
+          facts: existingFacts,
+          edges: existingEdges,
+        },
+        incoming,
+        strategy
+      );
+
+      // If strategy updated core blocks, save them
+      if (strategy === "OVERWRITE" || strategy === "UNION") {
+        if (mergeResult.mergedCoreMemory.persona) {
+          coreMgr.updateBlock("persona", mergeResult.mergedCoreMemory.persona);
+        }
+        if (mergeResult.mergedCoreMemory.human) {
+          coreMgr.updateBlock("human", mergeResult.mergedCoreMemory.human);
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        importResult: mergeResult.result,
+        mergedStats: {
+          factsCount: mergeResult.mergedFacts.length,
+          edgesCount: mergeResult.mergedEdges.length,
+          coreMemoryChars: mergeResult.mergedCoreMemory.persona.length + mergeResult.mergedCoreMemory.human.length,
+        },
+      });
     }
 
     const rawUserMessage = body.message;

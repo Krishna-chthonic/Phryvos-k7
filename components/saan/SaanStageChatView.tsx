@@ -37,6 +37,7 @@ import {
   BookOpen,
   UserCheck,
   Inbox,
+  HardDriveDownload,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -45,6 +46,7 @@ import { SaanTimeTravelScrubberModal } from "./SaanTimeTravelScrubberModal";
 import { SaanIncrementalSummaryModal } from "./SaanIncrementalSummaryModal";
 import { SaanProfileExtractorModal } from "./SaanProfileExtractorModal";
 import { SaanBufferedQueueModal } from "./SaanBufferedQueueModal";
+import { SaanPortableMemoryModal } from "./SaanPortableMemoryModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -163,6 +165,9 @@ export function SaanStageChatView({
   // SuperAGI Buffered Memory Queue State
   const [isBufferedQueueOpen, setIsBufferedQueueOpen] = React.useState(false);
   const [bufferedQueueCount, setBufferedQueueCount] = React.useState(0);
+
+  // Gnosys & Dify Portable Memory Interchange State
+  const [isPortableMemoryOpen, setIsPortableMemoryOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1244,6 +1249,17 @@ export function SaanStageChatView({
                 <Inbox className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Buffer{bufferedQueueCount > 0 ? `: ${bufferedQueueCount}` : ""}</span>
               </button>
+
+              {/* Dify & Gnosys: Portable Memory Interchange Modal Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsPortableMemoryOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Sovereign Memory Snapshot Interchange (Gnosys & Dify Spec)"
+              >
+                <HardDriveDownload className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Interchange</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2003,6 +2019,25 @@ export function SaanStageChatView({
             .then((r) => r.json())
             .then((d) => {
               if (d.ok && d.metrics) setBufferedQueueCount(d.metrics.totalPending);
+            })
+            .catch(() => {});
+        }}
+      />
+
+      {/* Gnosys & Dify Sovereign Memory Interchange Modal */}
+      <SaanPortableMemoryModal
+        isOpen={isPortableMemoryOpen}
+        onClose={() => setIsPortableMemoryOpen(false)}
+        onMemoryImported={() => {
+          // Re-fetch Core Memory and Profile
+          fetch("/api/saan/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "letta_summary" }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.ok && d.blocks) setCoreMemBlocks(d.blocks);
             })
             .catch(() => {});
         }}

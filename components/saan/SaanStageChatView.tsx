@@ -48,6 +48,7 @@ import {
   ShieldAlert,
   Webhook,
   Globe,
+  Target,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -71,6 +72,7 @@ import { SaanLifecycleHookModal } from "./SaanLifecycleHookModal";
 import { SaanMetasearchCitationModal } from "./SaanMetasearchCitationModal";
 import { SaanCleanMarkdownModal } from "./SaanCleanMarkdownModal";
 import { SaanSecurityFenceModal } from "./SaanSecurityFenceModal";
+import { SaanAccessibilityTreeModal } from "./SaanAccessibilityTreeModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -238,6 +240,9 @@ export function SaanStageChatView({
   // Crawl4AI Security Fence State
   const [isSecurityFenceOpen, setIsSecurityFenceOpen] = React.useState(false);
   const [blockedThreatCount, setBlockedThreatCount] = React.useState(1);
+
+  // Browser-Use Accessibility DOM Tree State
+  const [isAccessibilityTreeOpen, setIsAccessibilityTreeOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1504,6 +1509,17 @@ export function SaanStageChatView({
                   </span>
                 )}
               </button>
+
+              {/* Browser-Use: Accessibility Tree DOM Parser Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsAccessibilityTreeOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Inspect Browser-Use Accessibility DOM Tree & Interactive Element Map (Repo #33)"
+              >
+                <Target className="w-3.5 h-3.5 text-emerald-400" />
+                <span>DOMTree</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2373,6 +2389,12 @@ export function SaanStageChatView({
         isOpen={isSecurityFenceOpen}
         onClose={() => setIsSecurityFenceOpen(false)}
         onThreatsBlockedChange={(cnt) => setBlockedThreatCount(cnt)}
+      />
+
+      {/* Browser-Use Accessibility DOM Tree Modal */}
+      <SaanAccessibilityTreeModal
+        isOpen={isAccessibilityTreeOpen}
+        onClose={() => setIsAccessibilityTreeOpen(false)}
       />
     </div>
   );

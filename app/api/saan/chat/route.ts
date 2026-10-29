@@ -28,6 +28,7 @@ import {
   globalMarkdownScraper,
   globalWebSecurityFence,
   globalWebSecurityAuditor,
+  globalAccessibilityParser,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -831,6 +832,34 @@ export async function POST(req: NextRequest) {
         stats: globalWebSecurityAuditor.getStats(),
         records: globalWebSecurityAuditor.getRecords(),
       });
+    }
+
+    // Browser-Use Accessibility Tree DOM Parser (Repo #33) Endpoints
+    if (body.type === "get_accessibility_tree") {
+      const latest = globalAccessibilityParser.getLatest();
+      return NextResponse.json({
+        ok: true,
+        latest,
+        history: globalAccessibilityParser.getHistory(),
+      });
+    }
+
+    if (body.type === "parse_accessibility_tree" && body.html) {
+      const result = globalAccessibilityParser.parse(body.html, {
+        url: body.url || "https://local-agent.browser/view",
+        title: body.title || "Parsed Web Page",
+      });
+      return NextResponse.json({
+        ok: true,
+        result,
+        latest: globalAccessibilityParser.getLatest(),
+        history: globalAccessibilityParser.getHistory(),
+      });
+    }
+
+    if (body.type === "clear_accessibility_history") {
+      globalAccessibilityParser.clearHistory();
+      return NextResponse.json({ ok: true });
     }
 
     const rawUserMessage = body.message;

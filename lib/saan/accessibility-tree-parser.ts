@@ -123,11 +123,45 @@ const DYNAMIC_CLASSES = new Set([
   'current',
 ]);
 
+export interface AccessibilityTreeRecord {
+  id: string;
+  url?: string;
+  title?: string;
+  parsedAt: number;
+  result: AccessibilityTreeResult;
+}
+
 export class AccessibilityTreeParser {
+  private history: AccessibilityTreeRecord[] = [];
+
+  constructor() {
+    // Seed default sample page
+    const sampleHtml = `
+      <header>
+        <nav>
+          <a href="/home">Phryvos Sovereign OS</a>
+          <button id="theme-btn">Toggle Dark Mode</button>
+        </nav>
+      </header>
+      <main>
+        <section class="search-box">
+          <input type="text" name="query" placeholder="Ask Saan anything or execute commands..." />
+          <button type="submit" id="search-btn">Search & Execute</button>
+        </section>
+        <section class="controls">
+          <button id="record-voice" aria-label="Start Voice Dictation">🎤 Speak</button>
+          <div role="button" id="vault-lock" tabindex="0">🔒 Lock Vault</div>
+          <a href="/settings">System Settings</a>
+        </section>
+      </main>
+    `;
+    this.parse(sampleHtml, { url: "https://saan.local/dashboard", title: "Phryvos K7 Dashboard" });
+  }
+
   /**
    * Parses an HTML fragment or page into an indexed accessibility tree with a selector map.
    */
-  public parse(html: string): AccessibilityTreeResult {
+  public parse(html: string, meta?: { url?: string; title?: string }): AccessibilityTreeResult {
     if (!html || typeof html !== 'string') {
       return { serializedTree: '', selectorMap: {}, interactiveCount: 0 };
     }
@@ -268,12 +302,37 @@ export class AccessibilityTreeParser {
     }
 
     const serializedTree = lines.join('\n');
-
-    return {
+    const result: AccessibilityTreeResult = {
       serializedTree,
       selectorMap,
       interactiveCount: currentIndex,
     };
+
+    this.history.unshift({
+      id: `dom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      url: meta?.url,
+      title: meta?.title,
+      parsedAt: Date.now(),
+      result,
+    });
+
+    if (this.history.length > 30) {
+      this.history.pop();
+    }
+
+    return result;
+  }
+
+  public getHistory(): AccessibilityTreeRecord[] {
+    return this.history;
+  }
+
+  public getLatest(): AccessibilityTreeRecord | null {
+    return this.history.length > 0 ? this.history[0] : null;
+  }
+
+  public clearHistory(): void {
+    this.history = [];
   }
 
   private checkIsInteractive(tag: string, attrs: Record<string, string>): boolean {

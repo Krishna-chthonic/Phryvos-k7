@@ -88,6 +88,7 @@ import { SaanPreflightPipelineModal } from "./SaanPreflightPipelineModal";
 import { SaanArtifactReasoningModal } from "./SaanArtifactReasoningModal";
 import { SaanVaultBackupModal } from "./SaanVaultBackupModal";
 import { SaanComposerBusModal } from "./SaanComposerBusModal";
+import { SaanDocumentCollectorModal } from "./SaanDocumentCollectorModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -291,6 +292,7 @@ export function SaanStageChatView({
 
   // LobeHub Composer Draft Bus & Multi-Session Routing State
   const [isComposerBusModalOpen, setIsComposerBusModalOpen] = React.useState(false);
+  const [isDocVaultModalOpen, setIsDocVaultModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1696,6 +1698,17 @@ export function SaanStageChatView({
                 <PenTool className="w-3.5 h-3.5 text-violet-400" />
                 <span>ComposerBus</span>
               </button>
+
+              {/* Anything-LLM: Document Collector Vault & Wikilink Graph Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsDocVaultModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Inspect Anything-LLM Document Collector Vault & Clickable Wikilinks (Repo #46)"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                <span>DocVault</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2654,6 +2667,13 @@ export function SaanStageChatView({
         isOpen={isComposerBusModalOpen}
         onClose={() => setIsComposerBusModalOpen(false)}
         onInjectDraftToComposer={(text) => setInput(text)}
+      />
+
+      {/* Anything-LLM Document Collector Vault Modal */}
+      <SaanDocumentCollectorModal
+        isOpen={isDocVaultModalOpen}
+        onClose={() => setIsDocVaultModalOpen(false)}
+        onInsertWikilink={(link) => setInput((prev) => (prev ? `${prev} ${link}` : link))}
       />
     </div>
   );

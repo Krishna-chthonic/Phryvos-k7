@@ -39,6 +39,7 @@ import {
   globalArtifactReasoningEngine,
   globalVaultBackupEngine,
   globalComposerDraftBus,
+  globalDocumentCollectorVault,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1196,6 +1197,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true,
         classification,
+      });
+    }
+
+    // Anything-LLM Document Collector Vault & Clickable Wikilinks (Repo #46) Endpoints
+    if (body.type === "ingest_document" && body.textContent) {
+      const doc = globalDocumentCollectorVault.ingestDocument(
+        body.textContent,
+        body.metadata || { title: body.title || "Untitled Document" },
+        { maxChunkWords: body.maxChunkWords, overlapWords: body.overlapWords }
+      );
+      return NextResponse.json({
+        ok: true,
+        document: doc,
+        totalDocs: globalDocumentCollectorVault.getDocuments().length,
+      });
+    }
+
+    if (body.type === "get_vault_documents") {
+      const docs = globalDocumentCollectorVault.getDocuments();
+      return NextResponse.json({
+        ok: true,
+        documents: docs,
+        totalCount: docs.length,
+      });
+    }
+
+    if (body.type === "search_vault_chunks" && body.query) {
+      const results = globalDocumentCollectorVault.searchChunks(body.query, body.limit || 10);
+      return NextResponse.json({
+        ok: true,
+        query: body.query,
+        results,
+      });
+    }
+
+    if (body.type === "get_vault_wikilinks") {
+      const graph = globalDocumentCollectorVault.getWikilinkGraph();
+      return NextResponse.json({
+        ok: true,
+        graph,
       });
     }
 

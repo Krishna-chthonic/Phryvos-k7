@@ -223,3 +223,89 @@ export class DocumentCollector {
     };
   }
 }
+
+export interface WikilinkGraphNode {
+  tag: string;
+  count: number;
+  docIds: string[];
+}
+
+export class DocumentCollectorVault {
+  private collector: DocumentCollector;
+  private documents: Map<string, IngestedDocument> = new Map();
+
+  constructor() {
+    this.collector = new DocumentCollector();
+  }
+
+  public ingestDocument(
+    textContent: string,
+    metadata: DocumentMetadata,
+    options?: { maxChunkWords?: number; overlapWords?: number }
+  ): IngestedDocument {
+    const doc = this.collector.processRawText(textContent, metadata, options);
+    this.documents.set(doc.id, doc);
+    return doc;
+  }
+
+  public getDocuments(): IngestedDocument[] {
+    return Array.from(this.documents.values());
+  }
+
+  public getDocumentById(id: string): IngestedDocument | undefined {
+    return this.documents.get(id);
+  }
+
+  public deleteDocument(id: string): boolean {
+    return this.documents.delete(id);
+  }
+
+  public searchChunks(query: string, limit = 10): Array<DocumentChunk & { docId: string; docTitle: string }> {
+    if (!query || !query.trim()) return [];
+    const q = query.toLowerCase();
+    const results: Array<DocumentChunk & { docId: string; docTitle: string }> = [];
+
+    for (const doc of this.documents.values()) {
+      for (const chunk of doc.chunks) {
+        if (
+          chunk.text.toLowerCase().includes(q) ||
+          chunk.wikilinks?.some(w => w.toLowerCase().includes(q))
+        ) {
+          results.push({
+            ...chunk,
+            docId: doc.id,
+            docTitle: doc.title,
+          });
+          if (results.length >= limit) return results;
+        }
+      }
+    }
+    return results;
+  }
+
+  public getWikilinkGraph(): WikilinkGraphNode[] {
+    const graphMap = new Map<string, { count: number; docIds: Set<string> }>();
+
+    for (const doc of this.documents.values()) {
+      for (const link of doc.detectedWikilinks) {
+        const existing = graphMap.get(link) || { count: 0, docIds: new Set<string>() };
+        existing.count += 1;
+        existing.docIds.add(doc.id);
+        graphMap.set(link, existing);
+      }
+    }
+
+    return Array.from(graphMap.entries()).map(([tag, data]) => ({
+      tag,
+      count: data.count,
+      docIds: Array.from(data.docIds),
+    }));
+  }
+
+  public clear(): void {
+    this.documents.clear();
+  }
+}
+
+export const globalDocumentCollectorVault = new DocumentCollectorVault();
+

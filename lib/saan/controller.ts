@@ -152,8 +152,11 @@ import {
 } from "./composer-draft-bus";
 import {
   DocumentCollector,
+  DocumentCollectorVault,
+  globalDocumentCollectorVault,
   type IngestedDocument,
   type DocumentMetadata,
+  type WikilinkGraphNode,
 } from "./document-collector-vault";
 import {
   MemoryBenchmarkHarness,
@@ -191,6 +194,7 @@ export const globalArtifactReasoningEngine = new ArtifactReasoningEngine();
 export const globalVaultBackupEngine = new VaultBackupEngine();
 export const globalComposerDraftBus = new ComposerDraftBus();
 export const globalDocumentCollector = new DocumentCollector();
+export { globalDocumentCollectorVault };
 export const globalMemoryBenchmark = new MemoryBenchmarkHarness();
 export const globalBiTemporalCalculus = new BiTemporalCalculus();
 export const globalMem0PromptBuilder = new Mem0PromptBuilder();
@@ -388,6 +392,8 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "package_vault_backup":
     case "queue_composer_draft":
     case "process_vault_document":
+    case "search_vault_chunks":
+    case "get_vault_wikilink_graph":
     case "run_memory_benchmark_evaluation":
     case "evaluate_bitemporal_validity":
       return 1; // Tier 1: Auto-permitted read / safe computation
@@ -2301,16 +2307,46 @@ export function processVaultDocumentAction(
   maxChunkWords?: number
 ): SaanActionResult {
   try {
-    const doc = globalDocumentCollector.processRawText(textContent, metadata || {}, { maxChunkWords });
+    const doc = globalDocumentCollectorVault.ingestDocument(textContent, metadata || {}, { maxChunkWords });
     return {
       success: true,
       action: "process_vault_document",
       tier: 1,
-      message: `Processed document "${doc.title}" into ${doc.chunks.length} chunk(s) (${doc.wordCount} words)`,
+      message: `Processed and saved document "${doc.title}" into ${doc.chunks.length} chunk(s) (${doc.wordCount} words, ${doc.detectedWikilinks.length} wikilinks)`,
       data: doc,
     };
   } catch (err: any) {
     return { success: false, action: "process_vault_document", tier: 1, message: err.message };
+  }
+}
+
+export function searchVaultChunksAction(query: string, limit?: number): SaanActionResult {
+  try {
+    const hits = globalDocumentCollectorVault.searchChunks(query, limit);
+    return {
+      success: true,
+      action: "search_vault_chunks",
+      tier: 1,
+      message: `Found ${hits.length} matching chunk(s)`,
+      data: { query, results: hits },
+    };
+  } catch (err: any) {
+    return { success: false, action: "search_vault_chunks", tier: 1, message: err.message };
+  }
+}
+
+export function getVaultWikilinkGraphAction(): SaanActionResult {
+  try {
+    const graph = globalDocumentCollectorVault.getWikilinkGraph();
+    return {
+      success: true,
+      action: "get_vault_wikilink_graph",
+      tier: 1,
+      message: `Extracted ${graph.length} wikilink node(s) across vault documents`,
+      data: { nodes: graph },
+    };
+  } catch (err: any) {
+    return { success: false, action: "get_vault_wikilink_graph", tier: 1, message: err.message };
   }
 }
 
@@ -2524,6 +2560,10 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return queueComposerDraftAction(params.text, params.append, params.targetAgentId);
     case "process_vault_document":
       return processVaultDocumentAction(params.textContent, params.metadata, params.maxChunkWords);
+    case "search_vault_chunks":
+      return searchVaultChunksAction(params.query, params.limit);
+    case "get_vault_wikilink_graph":
+      return getVaultWikilinkGraphAction();
     case "run_memory_benchmark_evaluation":
       return runMemoryBenchmarkEvaluationAction(params.probes);
     case "evaluate_bitemporal_validity":

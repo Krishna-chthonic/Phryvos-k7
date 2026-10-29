@@ -44,6 +44,7 @@ import {
   Scale,
   Workflow,
   Lock,
+  Compass,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -60,6 +61,7 @@ import { SaanProactiveTriggerModal } from "./SaanProactiveTriggerModal";
 import { SaanMemoryEvalJudgeModal } from "./SaanMemoryEvalJudgeModal";
 import { SaanAssociativeNetworkModal } from "./SaanAssociativeNetworkModal";
 import { SaanStateLeaseModal } from "./SaanStateLeaseModal";
+import { SaanResearchWorkflowModal } from "./SaanResearchWorkflowModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -202,6 +204,9 @@ export function SaanStageChatView({
 
   // CrewAI Resilient State Lease Mutex State
   const [isStateLeaseOpen, setIsStateLeaseOpen] = React.useState(false);
+
+  // LangGraph Cyclic Research Workflow State
+  const [isResearchWorkflowOpen, setIsResearchWorkflowOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1371,6 +1376,17 @@ export function SaanStageChatView({
                 <Lock className="w-3.5 h-3.5 text-teal-400" />
                 <span>LeaseLock</span>
               </button>
+
+              {/* LangGraph: Cyclic Multi-Agent Research Planner Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsResearchWorkflowOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-indigo-950/40 text-indigo-300 border border-zinc-800 hover:border-indigo-500/40 transition cursor-pointer"
+                title="Inspect Cyclic Multi-Agent Research Planner & Checkpoints (LangGraph Engine)"
+              >
+                <Compass className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Planner</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2194,6 +2210,12 @@ export function SaanStageChatView({
       <SaanStateLeaseModal
         isOpen={isStateLeaseOpen}
         onClose={() => setIsStateLeaseOpen(false)}
+      />
+
+      {/* LangGraph Cyclic Multi-Agent Research Planner Modal */}
+      <SaanResearchWorkflowModal
+        isOpen={isResearchWorkflowOpen}
+        onClose={() => setIsResearchWorkflowOpen(false)}
       />
     </div>
   );

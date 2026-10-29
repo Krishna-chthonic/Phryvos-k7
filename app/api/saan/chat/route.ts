@@ -19,6 +19,7 @@ import {
   type SaanActionResult,
   globalAssociativeNetwork,
   globalLeaseManager,
+  globalResearchPlanner,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -621,6 +622,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: preempted,
         metrics: globalLeaseManager.getMetrics(),
+      });
+    }
+
+    // LangGraph Cyclic Research Planner (Repo #25) Endpoints
+    if (body.type === "get_research_workflows") {
+      return NextResponse.json({
+        ok: true,
+        history: globalResearchPlanner.getWorkflowHistory(),
+        latest: globalResearchPlanner.getLatestRun() || null,
+      });
+    }
+
+    if (body.type === "execute_research_workflow" && body.query) {
+      const run = globalResearchPlanner.executeCyclicGraph(body.query, body.options || {});
+      return NextResponse.json({
+        ok: true,
+        run,
+        history: globalResearchPlanner.getWorkflowHistory(),
       });
     }
 

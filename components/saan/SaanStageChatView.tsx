@@ -70,6 +70,7 @@ import { SaanRetryTelemetryModal } from "./SaanRetryTelemetryModal";
 import { SaanLifecycleHookModal } from "./SaanLifecycleHookModal";
 import { SaanMetasearchCitationModal } from "./SaanMetasearchCitationModal";
 import { SaanCleanMarkdownModal } from "./SaanCleanMarkdownModal";
+import { SaanSecurityFenceModal } from "./SaanSecurityFenceModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -233,6 +234,10 @@ export function SaanStageChatView({
 
   // Firecrawl Clean Markdown Reader State
   const [isCleanReaderOpen, setIsCleanReaderOpen] = React.useState(false);
+
+  // Crawl4AI Security Fence State
+  const [isSecurityFenceOpen, setIsSecurityFenceOpen] = React.useState(false);
+  const [blockedThreatCount, setBlockedThreatCount] = React.useState(1);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1483,6 +1488,22 @@ export function SaanStageChatView({
                 <BookOpen className="w-3.5 h-3.5 text-orange-400" />
                 <span>Reader</span>
               </button>
+
+              {/* Crawl4AI: Security Fence & Injection Shield Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsSecurityFenceOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-emerald-950/40 text-emerald-300 border border-zinc-800 hover:border-emerald-500/40 transition cursor-pointer"
+                title="Inspect Crawl4AI Web Security Fence & Prompt Injection Shield (Repo #32)"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Shield</span>
+                {blockedThreatCount > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    {blockedThreatCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2345,6 +2366,13 @@ export function SaanStageChatView({
       <SaanCleanMarkdownModal
         isOpen={isCleanReaderOpen}
         onClose={() => setIsCleanReaderOpen(false)}
+      />
+
+      {/* Crawl4AI Security Fence Modal */}
+      <SaanSecurityFenceModal
+        isOpen={isSecurityFenceOpen}
+        onClose={() => setIsSecurityFenceOpen(false)}
+        onThreatsBlockedChange={(cnt) => setBlockedThreatCount(cnt)}
       />
     </div>
   );

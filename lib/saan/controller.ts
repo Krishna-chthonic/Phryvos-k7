@@ -196,6 +196,7 @@ export const globalBiTemporalCalculus = new BiTemporalCalculus();
 export const globalMem0PromptBuilder = new Mem0PromptBuilder();
 export { globalLifecycleHookManager } from "./huginn";
 export { globalFirecrawlStore } from "./clean-markdown-scraper";
+export { globalWebSecurityAuditor } from "./web-security-fence";
 
 // Register base system status resource and echo tool on global MCP bridge
 globalMcpBridge.registerResource(

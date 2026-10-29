@@ -26,6 +26,8 @@ import {
   globalMetasearchAggregator,
   globalFirecrawlStore,
   globalMarkdownScraper,
+  globalWebSecurityFence,
+  globalWebSecurityAuditor,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -801,6 +803,33 @@ export async function POST(req: NextRequest) {
         ok: true,
         article: record,
         articles: globalFirecrawlStore.getArticles(),
+      });
+    }
+
+    // Crawl4AI Prompt Injection Security Fence (Repo #32) Endpoints
+    if (body.type === "get_security_fence_state") {
+      return NextResponse.json({
+        ok: true,
+        stats: globalWebSecurityAuditor.getStats(),
+        records: globalWebSecurityAuditor.getRecords(),
+      });
+    }
+
+    if (body.type === "test_security_fence" && body.content) {
+      const sourceUrl = body.url || "https://untrusted-web-source.org/article";
+      const fenceResult = globalWebSecurityFence.fenceWebContent(body.content, {
+        url: sourceUrl,
+        title: body.title,
+      });
+
+      const auditRecord = globalWebSecurityAuditor.recordScan(sourceUrl, fenceResult, body.content);
+
+      return NextResponse.json({
+        ok: true,
+        fence: fenceResult,
+        auditRecord,
+        stats: globalWebSecurityAuditor.getStats(),
+        records: globalWebSecurityAuditor.getRecords(),
       });
     }
 

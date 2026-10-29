@@ -239,6 +239,7 @@ describe("Category 5: Tools, Wire Protocols & Voice Interaction Suite (Repos 34-
 
     test("Atomic queue draining on CancelFrame (barge-in cancellation)", () => {
       const pipeline = new PipecatFramePipeline();
+      pipeline.clear();
 
       // Enqueue 3 interruptible frames
       pipeline.push(new AudioRawFrame(new Uint8Array(160)));

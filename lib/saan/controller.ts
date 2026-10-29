@@ -2372,7 +2372,7 @@ export function runMemoryBenchmarkEvaluationAction(probes?: ProbeRecord[]): Saan
       action: "run_memory_benchmark_evaluation",
       tier: 1,
       message: `Recall: ${summary.recallPercent}%, Refusal: ${summary.refusedAdversarialPercent}%, Latency p50: ${summary.searchLatencyP50Ms}ms (Sub-10ms target: ${summary.sub10msTargetMet})`,
-      data: { summary, probes: evaluatedProbes },
+      data: { ...summary, summary, probes: evaluatedProbes },
     };
   } catch (err: any) {
     return { success: false, action: "run_memory_benchmark_evaluation", tier: 1, message: err.message };

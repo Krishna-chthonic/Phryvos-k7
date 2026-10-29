@@ -55,7 +55,11 @@ export class KokoroTextSplitter {
 
     const scanBoundary = (start: number): { end: number; nextNonSpace: number } => {
       let end = start;
-      while (end + 1 < len && TRAILING_CHARS.has(buffer[end + 1])) {
+      while (
+        end + 1 < len &&
+        (TRAILING_CHARS.has(buffer[end + 1]) ||
+         (TRAILING_CHARS.has(buffer[end]) && SENTENCE_TERMINATORS.has(buffer[end + 1])))
+      ) {
         ++end;
       }
       let nextNonSpace = end + 1;
@@ -147,7 +151,7 @@ export class KokoroTextSplitter {
 
         // Valid sentence boundary
         const sentence = buffer.substring(sentenceStart, boundaryEnd + 1).trim();
-        if (sentence && sentence !== '...' && sentence !== '…') {
+        if (sentence && sentence !== '...' && sentence !== '…' && /\p{L}|\p{N}/u.test(sentence)) {
           sentences.push(sentence);
         }
 
@@ -165,7 +169,7 @@ export class KokoroTextSplitter {
 
     // Trailing remnant
     const remainder = buffer.substring(sentenceStart).trim();
-    if (remainder.length > 0) {
+    if (remainder.length > 0 && /\p{L}|\p{N}/u.test(remainder)) {
       sentences.push(remainder);
     }
 

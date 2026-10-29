@@ -190,6 +190,10 @@ export class VaultBackupEngine {
     };
   }
 
+  public createBackupPackage(input: Parameters<VaultBackupEngine['packageBackup']>[0]): VaultBackupPackage {
+    return this.packageBackup(input);
+  }
+
   /**
    * Packages sovereign vault data into an export bundle with resource deduplication.
    */
@@ -209,11 +213,22 @@ export class VaultBackupEngine {
       sessionId?: string;
       storageKey?: string;
     }>;
+    resources?: Array<{
+      id?: string;
+      filename: string;
+      mimeType: string;
+      content?: string | Buffer;
+      contentBase64?: string;
+      kind?: BackupResourceKind;
+      scope?: BackupResourceScope;
+      sessionId?: string;
+      storageKey?: string;
+    }>;
   }): VaultBackupPackage {
     const memories = input.memories || [];
     const tasks = input.tasks || [];
     const sessions = input.sessions || [];
-    const rawResources = input.rawResources || [];
+    const rawResources = input.rawResources || (input as any).resources || [];
     const settings = this.cleanSettingsForBackup(input.settings || {}, input.includeKeys ?? false);
 
     // Resource deduplication by composite key: checksum:encoding:mimeType
@@ -222,7 +237,9 @@ export class VaultBackupEngine {
     let deduplicatedCount = 0;
 
     for (const raw of rawResources) {
-      const buffer = typeof raw.content === 'string' ? Buffer.from(raw.content) : raw.content;
+      const buffer = raw.contentBase64
+        ? Buffer.from(raw.contentBase64, 'base64')
+        : (typeof raw.content === 'string' ? Buffer.from(raw.content) : raw.content);
       if (buffer.length > MAX_BACKUP_RESOURCE_ENTRY_BYTES) {
         throw new Error(`Resource ${raw.filename} exceeds max entry size of ${MAX_BACKUP_RESOURCE_ENTRY_BYTES} bytes`);
       }
@@ -417,3 +434,6 @@ export class VaultBackupEngine {
     };
   }
 }
+
+export const globalVaultBackupEngine = new VaultBackupEngine();
+

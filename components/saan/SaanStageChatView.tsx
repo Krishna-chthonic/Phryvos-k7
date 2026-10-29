@@ -52,6 +52,7 @@ import {
   EyeOff,
   Cpu,
   Music,
+  Archive,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -84,6 +85,7 @@ import { SaanWhisperAsrModal } from "./SaanWhisperAsrModal";
 import { SaanKokoroCadenceModal } from "./SaanKokoroCadenceModal";
 import { SaanPreflightPipelineModal } from "./SaanPreflightPipelineModal";
 import { SaanArtifactReasoningModal } from "./SaanArtifactReasoningModal";
+import { SaanVaultBackupModal } from "./SaanVaultBackupModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -281,6 +283,9 @@ export function SaanStageChatView({
 
   // LibreChat Modular Artifacts & HuggingFace CoT Reasoning State
   const [isArtifactsModalOpen, setIsArtifactsModalOpen] = React.useState(false);
+
+  // Chatbox Sovereign Encrypted Vault & Checksum State
+  const [isVaultBackupModalOpen, setIsVaultBackupModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1664,6 +1669,17 @@ export function SaanStageChatView({
                 <Layers className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Artifacts</span>
               </button>
+
+              {/* Chatbox: Sovereign Vault Package & Checksum Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsVaultBackupModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Inspect Chatbox Sovereign Encrypted Vault & SHA-256 Checksum (Repo #44)"
+              >
+                <Archive className="w-3.5 h-3.5 text-amber-400" />
+                <span>VaultBackup</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2609,6 +2625,12 @@ export function SaanStageChatView({
       <SaanArtifactReasoningModal
         isOpen={isArtifactsModalOpen}
         onClose={() => setIsArtifactsModalOpen(false)}
+      />
+
+      {/* Chatbox Sovereign Encrypted Vault & Checksum Modal */}
+      <SaanVaultBackupModal
+        isOpen={isVaultBackupModalOpen}
+        onClose={() => setIsVaultBackupModalOpen(false)}
       />
     </div>
   );

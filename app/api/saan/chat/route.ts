@@ -37,6 +37,7 @@ import {
   globalCadenceEngine,
   globalPreflightPipeline,
   globalArtifactReasoningEngine,
+  globalVaultBackupEngine,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1121,6 +1122,43 @@ export async function POST(req: NextRequest) {
         reasoning,
         artifacts,
         citations,
+      });
+    }
+
+    // Chatbox Sovereign Encrypted Vault & SHA-256 Checksum (Repo #44) Endpoints
+    if (body.type === "create_vault_backup") {
+      const pkg = globalVaultBackupEngine.packageBackup({
+        soul: body.soul,
+        memories: body.memories,
+        tasks: body.tasks,
+        sessions: body.sessions,
+        settings: body.settings,
+        includeKeys: body.includeKeys,
+        rawResources: body.resources,
+      });
+      return NextResponse.json({
+        ok: true,
+        package: pkg,
+      });
+    }
+
+    if (body.type === "verify_vault_backup" && body.package) {
+      const result = globalVaultBackupEngine.verifyBackup(body.package);
+      return NextResponse.json({
+        ok: true,
+        ...result,
+      });
+    }
+
+    if (body.type === "restore_vault_backup" && body.package) {
+      const result = globalVaultBackupEngine.restoreBackup(
+        body.package,
+        body.existingState || {},
+        body.options || { conflictResolution: "overwrite" }
+      );
+      return NextResponse.json({
+        ok: true,
+        result,
       });
     }
 

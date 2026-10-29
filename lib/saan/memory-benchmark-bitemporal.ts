@@ -494,6 +494,148 @@ export class BiTemporalCalculus {
       })
       .sort((a, b) => b.rrfScore - a.rrfScore);
   }
+
+  /**
+   * Identifies contradictory temporal edges sharing the same subject and relation
+   * whose valid-time intervals overlap simultaneously.
+   */
+  public findContradictions(edges?: TemporalEdge[]): ContradictionPair[] {
+    const list = edges || this.edges;
+    const contradictions: ContradictionPair[] = [];
+
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i];
+        const b = list[j];
+
+        const subjectA = (a.source || a.sourceNodeId || 'user').toLowerCase();
+        const subjectB = (b.source || b.sourceNodeId || 'user').toLowerCase();
+        const relA = (a.relation || 'relates_to').toLowerCase();
+        const relB = (b.relation || 'relates_to').toLowerCase();
+
+        // Check if same subject & relation
+        const sameSubjectAndRel = subjectA === subjectB && relA === relB;
+
+        // Check if facts state contradictory states (e.g., location or preference)
+        const locationContradiction =
+          /\b(lives in|resides in|located in|moved to)\b/i.test(a.fact) &&
+          /\b(lives in|resides in|located in|moved to)\b/i.test(b.fact) &&
+          a.fact.trim() !== b.fact.trim();
+
+        if (sameSubjectAndRel || locationContradiction) {
+          const startA = a.validAtMs ?? (a.validAt ? new Date(a.validAt).getTime() : 0);
+          const endA = a.invalidAtMs ?? (a.invalidAt ? new Date(a.invalidAt).getTime() : Infinity);
+          const startB = b.validAtMs ?? (b.validAt ? new Date(b.validAt).getTime() : 0);
+          const endB = b.invalidAtMs ?? (b.invalidAt ? new Date(b.invalidAt).getTime() : Infinity);
+
+          const overlapStart = Math.max(startA, startB);
+          const overlapEnd = Math.min(endA, endB);
+
+          if (overlapStart < overlapEnd) {
+            contradictions.push({
+              edgeA: a,
+              edgeB: b,
+              subject: a.source || 'user',
+              relation: a.relation || 'relates_to',
+              overlapStartMs: overlapStart,
+              overlapEndMs: isFinite(overlapEnd) ? overlapEnd : null,
+              reason: `Overlapping valid interval from ${new Date(overlapStart).toISOString()}`,
+            });
+          }
+        }
+      }
+    }
+    return contradictions;
+  }
+
+  /**
+   * Resolves a contradiction pair by invalidating the superseded edge.
+   */
+  public resolveContradiction(
+    keepEdgeId: string,
+    invalidateEdgeId: string,
+    atTimeMs?: number
+  ): { resolved: boolean; invalidatedEdge?: TemporalEdge } {
+    const keepEdge = this.edges.find(e => e.id === keepEdgeId);
+    const targetIdx = this.edges.findIndex(e => e.id === invalidateEdgeId);
+
+    if (targetIdx === -1) return { resolved: false };
+
+    const invalidAtMs = atTimeMs ?? (keepEdge?.validAtMs || Date.now());
+    const oldEdge = this.edges[targetIdx];
+    const invalidatedEdge: TemporalEdge = {
+      ...oldEdge,
+      invalidAtMs,
+      invalidAt: new Date(invalidAtMs).toISOString(),
+      expiredAt: new Date().toISOString(),
+    };
+
+    this.edges[targetIdx] = invalidatedEdge;
+    return { resolved: true, invalidatedEdge };
+  }
+
+  /**
+   * Topologically orders temporal edges chronologically by validity start.
+   */
+  public topologicalSort(edges?: TemporalEdge[]): TemporalEdge[] {
+    const list = [...(edges || this.edges)];
+    return list.sort((a, b) => {
+      const startA = a.validAtMs ?? (a.validAt ? new Date(a.validAt).getTime() : 0);
+      const startB = b.validAtMs ?? (b.validAt ? new Date(b.validAt).getTime() : 0);
+      return startA - startB;
+    });
+  }
+
+  /**
+   * Seeds demo bitemporal facts demonstrating contradiction detection & resolution.
+   */
+  public seedSampleContradictionGraph(): void {
+    this.edges = [
+      {
+        id: 'edge_loc_mumbai',
+        source: 'user',
+        target: 'mumbai',
+        relation: 'lives_in',
+        fact: 'User lives in Mumbai central district',
+        validAtMs: new Date('2024-01-01T00:00:00Z').getTime(),
+        validAt: '2024-01-01T00:00:00.000Z',
+        invalidAtMs: null,
+        invalidAt: null,
+      },
+      {
+        id: 'edge_loc_vrindavan',
+        source: 'user',
+        target: 'vrindavan',
+        relation: 'lives_in',
+        fact: 'User lives in Vrindavan sanctuary',
+        validAtMs: new Date('2026-06-01T00:00:00Z').getTime(),
+        validAt: '2026-06-01T00:00:00.000Z',
+        invalidAtMs: null,
+        invalidAt: null,
+      },
+      {
+        id: 'edge_tea_chai',
+        source: 'user',
+        target: 'chai',
+        relation: 'enjoys_drink',
+        fact: 'User drinks ginger masala chai daily',
+        validAtMs: new Date('2025-01-01T00:00:00Z').getTime(),
+        validAt: '2025-01-01T00:00:00.000Z',
+        invalidAtMs: null,
+        invalidAt: null,
+      },
+    ];
+  }
+}
+
+export interface ContradictionPair {
+  edgeA: TemporalEdge;
+  edgeB: TemporalEdge;
+  subject: string;
+  relation: string;
+  overlapStartMs: number;
+  overlapEndMs: number | null;
+  reason: string;
 }
 
 // ==========================================

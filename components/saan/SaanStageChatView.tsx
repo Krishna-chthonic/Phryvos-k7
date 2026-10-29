@@ -90,6 +90,7 @@ import { SaanVaultBackupModal } from "./SaanVaultBackupModal";
 import { SaanComposerBusModal } from "./SaanComposerBusModal";
 import { SaanDocumentCollectorModal } from "./SaanDocumentCollectorModal";
 import { SaanMemoryBenchmarkModal } from "./SaanMemoryBenchmarkModal";
+import { SaanContradictionGraphModal } from "./SaanContradictionGraphModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -295,6 +296,7 @@ export function SaanStageChatView({
   const [isComposerBusModalOpen, setIsComposerBusModalOpen] = React.useState(false);
   const [isDocVaultModalOpen, setIsDocVaultModalOpen] = React.useState(false);
   const [isBenchmarkModalOpen, setIsBenchmarkModalOpen] = React.useState(false);
+  const [isContradictionModalOpen, setIsContradictionModalOpen] = React.useState(false);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1722,6 +1724,17 @@ export function SaanStageChatView({
                 <Activity className="w-3.5 h-3.5 text-indigo-400" />
                 <span>Benchmarks</span>
               </button>
+
+              {/* Graphiti Calculus Engine: Contradiction Graph & Topological Memory Sort Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsContradictionModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-amber-950/40 text-amber-300 border border-zinc-800 hover:border-amber-500/40 transition cursor-pointer"
+                title="Inspect Graphiti Calculus Engine & Contradiction Graph (Repo #48)"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Calculus</span>
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2693,6 +2706,12 @@ export function SaanStageChatView({
       <SaanMemoryBenchmarkModal
         isOpen={isBenchmarkModalOpen}
         onClose={() => setIsBenchmarkModalOpen(false)}
+      />
+
+      {/* Graphiti Calculus Engine Contradiction Graph Modal */}
+      <SaanContradictionGraphModal
+        isOpen={isContradictionModalOpen}
+        onClose={() => setIsContradictionModalOpen(false)}
       />
     </div>
   );

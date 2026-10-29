@@ -41,6 +41,7 @@ import {
   globalComposerDraftBus,
   globalDocumentCollectorVault,
   globalMemoryBenchmark,
+  globalBiTemporalCalculus,
 } from "@/lib/saan/controller";
 import { DEVICE_PROFILES, type DevicePreset } from "@/lib/saan/stealth-fetch-headers";
 import {
@@ -1263,6 +1264,40 @@ export async function POST(req: NextRequest) {
         ok: true,
         summary,
         probes,
+      });
+    }
+
+    // Graphiti Calculus Engine: Contradiction Graph & Topological Memory Sort (Repo #48) Endpoints
+    if (body.type === "get_contradiction_graph") {
+      if (globalBiTemporalCalculus.getAllEdges().length === 0) {
+        globalBiTemporalCalculus.seedSampleContradictionGraph();
+      }
+      const edges = globalBiTemporalCalculus.getAllEdges();
+      const contradictions = globalBiTemporalCalculus.findContradictions(edges);
+      const sorted = globalBiTemporalCalculus.topologicalSort(edges);
+      return NextResponse.json({
+        ok: true,
+        edges,
+        contradictions,
+        sorted,
+      });
+    }
+
+    if (body.type === "resolve_contradiction" && body.keepEdgeId && body.invalidateEdgeId) {
+      const result = globalBiTemporalCalculus.resolveContradiction(
+        body.keepEdgeId,
+        body.invalidateEdgeId,
+        body.atTimeMs
+      );
+      const edges = globalBiTemporalCalculus.getAllEdges();
+      const contradictions = globalBiTemporalCalculus.findContradictions(edges);
+      const sorted = globalBiTemporalCalculus.topologicalSort(edges);
+      return NextResponse.json({
+        ok: true,
+        result,
+        edges,
+        contradictions,
+        sorted,
       });
     }
 

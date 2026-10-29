@@ -396,6 +396,8 @@ export function getActionSecurityTier(action: string): 1 | 2 | 3 {
     case "get_vault_wikilink_graph":
     case "run_memory_benchmark_evaluation":
     case "evaluate_bitemporal_validity":
+    case "evaluate_contradiction_graph":
+    case "resolve_contradiction":
       return 1; // Tier 1: Auto-permitted read / safe computation
 
     case "create_task":
@@ -2398,6 +2400,47 @@ export function evaluateBiTemporalValidityAction(
   }
 }
 
+export function evaluateContradictionGraphAction(): SaanActionResult {
+  try {
+    if (globalBiTemporalCalculus.getAllEdges().length === 0) {
+      globalBiTemporalCalculus.seedSampleContradictionGraph();
+    }
+    const edges = globalBiTemporalCalculus.getAllEdges();
+    const contradictions = globalBiTemporalCalculus.findContradictions(edges);
+    const sorted = globalBiTemporalCalculus.topologicalSort(edges);
+    return {
+      success: true,
+      action: "evaluate_contradiction_graph",
+      tier: 1,
+      message: `Calculus evaluated: ${contradictions.length} contradiction(s) found across ${edges.length} edges`,
+      data: { edges, contradictions, sorted },
+    };
+  } catch (err: any) {
+    return { success: false, action: "evaluate_contradiction_graph", tier: 1, message: err.message };
+  }
+}
+
+export function resolveContradictionAction(
+  keepEdgeId: string,
+  invalidateEdgeId: string,
+  atTimeMs?: number
+): SaanActionResult {
+  try {
+    const result = globalBiTemporalCalculus.resolveContradiction(keepEdgeId, invalidateEdgeId, atTimeMs);
+    const edges = globalBiTemporalCalculus.getAllEdges();
+    const remaining = globalBiTemporalCalculus.findContradictions(edges);
+    return {
+      success: true,
+      action: "resolve_contradiction",
+      tier: 1,
+      message: result.resolved ? `Resolved contradiction. Invalidated ${invalidateEdgeId}.` : `Could not resolve`,
+      data: { result, remainingContradictions: remaining.length, edges },
+    };
+  } catch (err: any) {
+    return { success: false, action: "resolve_contradiction", tier: 1, message: err.message };
+  }
+}
+
 /**
  * Universal Action Dispatcher
  */
@@ -2571,6 +2614,10 @@ export async function dispatchSaanAction(action: string, params: any = {}): Prom
       return runMemoryBenchmarkEvaluationAction(params.probes);
     case "evaluate_bitemporal_validity":
       return evaluateBiTemporalValidityAction(params.edges, params.queryTimeMs);
+    case "evaluate_contradiction_graph":
+      return evaluateContradictionGraphAction();
+    case "resolve_contradiction":
+      return resolveContradictionAction(params.keepEdgeId, params.invalidateEdgeId, params.atTimeMs);
     default:
       return { success: false, action, tier: 2, message: `Unknown action: "${action}"` };
   }

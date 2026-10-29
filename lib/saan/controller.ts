@@ -194,6 +194,7 @@ export const globalDocumentCollector = new DocumentCollector();
 export const globalMemoryBenchmark = new MemoryBenchmarkHarness();
 export const globalBiTemporalCalculus = new BiTemporalCalculus();
 export const globalMem0PromptBuilder = new Mem0PromptBuilder();
+export { globalLifecycleHookManager } from "./huginn";
 
 // Register base system status resource and echo tool on global MCP bridge
 globalMcpBridge.registerResource(

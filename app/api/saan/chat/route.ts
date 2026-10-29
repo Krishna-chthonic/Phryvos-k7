@@ -22,6 +22,7 @@ import {
   globalResearchPlanner,
   globalGateManager,
   globalIdempotencyEngine,
+  globalLifecycleHookManager,
 } from "@/lib/saan/controller";
 import { checkCrisisSignals } from "@/lib/saan/safety";
 import { recordUserReplied } from "@/lib/saan/proactive";
@@ -711,6 +712,34 @@ export async function POST(req: NextRequest) {
         telemetry: globalIdempotencyEngine.getTelemetry(),
         deadLetters: globalIdempotencyEngine.getDeadLetters(),
         records: globalIdempotencyEngine.getAllRecords(),
+      });
+    }
+
+    // Huginn Agent Lifecycle Hooks Registry (Repo #28) Endpoints
+    if (body.type === "get_lifecycle_hooks") {
+      return NextResponse.json({
+        ok: true,
+        hooks: globalLifecycleHookManager.getHooks(),
+        auditLog: globalLifecycleHookManager.getAuditLog(),
+      });
+    }
+
+    if (body.type === "toggle_lifecycle_hook" && body.id) {
+      const enabled = globalLifecycleHookManager.toggleHook(body.id, body.enabled);
+      return NextResponse.json({
+        ok: true,
+        id: body.id,
+        enabled,
+        hooks: globalLifecycleHookManager.getHooks(),
+      });
+    }
+
+    if (body.type === "simulate_hook_lifecycle") {
+      const result = globalLifecycleHookManager.simulateLifecycleRun(body.userMessage || "Hello Saan!");
+      return NextResponse.json({
+        ok: true,
+        result,
+        auditLog: globalLifecycleHookManager.getAuditLog(),
       });
     }
 

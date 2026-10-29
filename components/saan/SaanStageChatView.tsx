@@ -46,6 +46,7 @@ import {
   Lock,
   Compass,
   ShieldAlert,
+  Webhook,
 } from "lucide-react";
 import { SaanTemporalGraphModal } from "./SaanTemporalGraphModal";
 import { SaanCognifyPipelineModal } from "./SaanCognifyPipelineModal";
@@ -65,6 +66,7 @@ import { SaanStateLeaseModal } from "./SaanStateLeaseModal";
 import { SaanResearchWorkflowModal } from "./SaanResearchWorkflowModal";
 import { SaanConfirmationGateModal } from "./SaanConfirmationGateModal";
 import { SaanRetryTelemetryModal } from "./SaanRetryTelemetryModal";
+import { SaanLifecycleHookModal } from "./SaanLifecycleHookModal";
 import { globalAvatarMapper } from "@/lib/saan/avatar-expressions";
 import { toNaturalSpeechText } from "@/lib/saan/speech-transformer";
 import { truncateHeardMemory } from "@/lib/saan/interruption-contract";
@@ -218,6 +220,10 @@ export function SaanStageChatView({
   // AutoGen Resilient Retry & Idempotency Telemetry State
   const [isRetryTelemetryOpen, setIsRetryTelemetryOpen] = React.useState(false);
   const [activeRetryCount, setActiveRetryCount] = React.useState(2);
+
+  // Huginn Agent Lifecycle Hooks Registry State
+  const [isLifecycleHookOpen, setIsLifecycleHookOpen] = React.useState(false);
+  const [activeHookCount, setActiveHookCount] = React.useState(6);
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -1430,6 +1436,22 @@ export function SaanStageChatView({
                   </span>
                 )}
               </button>
+
+              {/* Huginn: Agent Lifecycle Hooks Registry Trigger */}
+              <button
+                type="button"
+                onClick={() => setIsLifecycleHookOpen(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-medium bg-zinc-900 hover:bg-purple-950/40 text-purple-300 border border-zinc-800 hover:border-purple-500/40 transition cursor-pointer"
+                title="Inspect Huginn Agent Lifecycle Hooks Registry & Execution Monitor"
+              >
+                <Webhook className="w-3.5 h-3.5 text-purple-400" />
+                <span>Hooks</span>
+                {activeHookCount > 0 && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    {activeHookCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Airi: Real-Time Hearing Status Capsule with VU Spectrum */}
@@ -2273,6 +2295,13 @@ export function SaanStageChatView({
         isOpen={isRetryTelemetryOpen}
         onClose={() => setIsRetryTelemetryOpen(false)}
         onActiveRetriesChange={(cnt) => setActiveRetryCount(cnt)}
+      />
+
+      {/* Huginn Agent Lifecycle Hooks Registry Modal */}
+      <SaanLifecycleHookModal
+        isOpen={isLifecycleHookOpen}
+        onClose={() => setIsLifecycleHookOpen(false)}
+        onActiveHooksChange={(cnt) => setActiveHookCount(cnt)}
       />
     </div>
   );
